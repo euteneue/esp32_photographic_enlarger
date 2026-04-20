@@ -59,6 +59,8 @@ void ExposureTimer::setup()
 
     encoderMode_->setAcceleration(0); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
     encoderValue_->setAcceleration(250); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
+
+    display_->setBrightness(0);
 }
 
 

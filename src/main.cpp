@@ -14,7 +14,6 @@
 ExposureTimer* timer;
 
 // Logic instances
-ExposureCalculator calculator(BASE_TIME_DEFAULT, BASE_FSTOP_DEFAULT);
 FSM fsm;
 
 // RTOS task handles
@@ -38,6 +37,55 @@ void inputHandler(void *pvParameters);
 void displayUpdate(void *pvParameters);
 void exposureTimer(void *pvParameters);
 void stateManager(void *pvParameters);
+
+
+void testExposureCalculator() 
+{
+    double baseTime = 10.0; // seconds
+
+    Serial.printf("Calculating exposure times for base time: %.1f seconds and full stop granularity, single step mode\n", baseTime);
+    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
+    {
+        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::FullStops, fstop, false);
+        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
+    }
+
+    Serial.printf("Calculating exposure times for base time: %.1f seconds and full stop granularity, incremental mode\n", baseTime);
+    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
+    {
+        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::FullStops, fstop, true);
+        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
+    }
+
+    Serial.printf("Calculating exposure times for base time: %.1f seconds and half stop granularity, single step mode\n", baseTime);
+    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
+    {
+        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Halfs, fstop, false);
+        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
+    }
+
+    Serial.printf("Calculating exposure times for base time: %.1f seconds and half stop granularity, incremental mode\n", baseTime);
+    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
+    {
+        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Halfs, fstop, true);
+        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
+    }    
+
+    Serial.printf("Calculating exposure times for base time: %.1f seconds and third stop granularity, single step mode\n", baseTime);
+    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
+    {
+        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Thirds, fstop, false);
+        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
+    }
+
+    Serial.printf("Calculating exposure times for base time: %.1f seconds and third stop granularity, incremental mode\n", baseTime);
+    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
+    {
+        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Thirds, fstop, true);
+        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
+    }    
+}
+
 
 void setup() 
 {
@@ -70,12 +118,16 @@ void setup()
     xTaskCreate(stateManager, "StateManager", 2048, NULL, 1, &stateManagerTask);
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "finished initialization...");
+
+    testExposureCalculator();
 }
 
 void loop() {
     // Main loop can be empty as tasks handle everything
     vTaskDelay(pdMS_TO_TICKS(1000));
 }
+
+
 
 // Task implementations (stubs)
 void inputHandler(void *pvParameters) {
@@ -84,27 +136,22 @@ void inputHandler(void *pvParameters) {
 
     while (true) 
     {
+        uint8_t tmButtons = timer->getDisplay()->getButtons();
+
+        if (tmButtons & MODE_BUTTON) // Mode button is the first bit
+        {
+            msg.type = MsgType::MODE_BUTTON_PRESS;
+            msg.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode button");
+
+            xQueueSend(inputQueue, &msg, 0);
+        }
         // - user has turned the mode encoder
         if (timer->getEncoderMode()->encoderChanged()) 
         {
-            timer->getStatus()->toggleMode();
             msg.type = MsgType::ENCODER_MODE_CHANGE;
             msg.payload = nullptr;
-
-            const char* modeName = nullptr;
-            switch (timer->getStatus()->getMode()) {
-                case Mode::TestStrip:
-                    modeName = "TestStrip";
-                    break;
-                case Mode::Exposure:
-                    modeName = "Exposure";
-                    break;
-                case Mode::FocusLight:
-                    modeName = "FocusLight";
-                    break;
-            }
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the mode encoder, new mode: %s", modeName);
 
             xQueueSend(inputQueue, &msg, 0);
         }
@@ -155,7 +202,7 @@ void displayUpdate(void *pvParameters) {
         {
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "received message to update display");
             switch (msg->type) {
-                case MsgType::ENCODER_MODE_CHANGE:
+                case MsgType::MODE_BUTTON_PRESS:
                     timer->getDisplay()->displayMode(*timer->getStatus());
                     Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode");
                     break;
@@ -220,21 +267,38 @@ void stateManager(void *pvParameters)
         {
             switch (input->type) {
                 case MsgType::BUTTON_VALUE_PRESS:
-                    fsm.processInput(0); // next state
+                    //fsm.processInput(0); // next state
+                    
                     Logger.log(MYLOG, ELOG_LEVEL_INFO, "button value pressed, transitioning to next state");
                     break;
                 case MsgType::BUTTON_MODE_PRESS:
-                    fsm.processInput(0); // next state
+                    //fsm.processInput(0); // next state
+                   
                     Logger.log(MYLOG, ELOG_LEVEL_INFO, "button mode pressed, transitioning to next state");
                     break;
                 case MsgType::ENCODER_VALUE_CHANGE:
                     fsm.processInput(1); // adjust value up
                     Logger.log(MYLOG, ELOG_LEVEL_INFO, "encoder value changed, adjusting value up");
                     break;
-                case MsgType::ENCODER_MODE_CHANGE:
+                case MsgType::MODE_BUTTON_PRESS:
                     //fsm.processInput(-1); // adjust value down
+                    timer->getStatus()->toggleMode();                       
+                    const char* modeName = nullptr;
+                    switch (timer->getStatus()->getMode()) {
+                        case Mode::TestStrip:
+                            modeName = "TestStrip";
+                            break;
+                        case Mode::Exposure:
+                            modeName = "Exposure";
+                            break;
+                        case Mode::FocusLight:
+                            modeName = "FocusLight";
+                            break;
+                    }
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode button, new mode: %s", modeName);
+
                     xQueueSend(displayQueue, input, 0); // send to display task to update mode
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "encoder mode changed, adjusting value down");
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "mode button pressed, updating display to show new mode");
                     break;
             }
 

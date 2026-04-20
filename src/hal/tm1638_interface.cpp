@@ -85,6 +85,7 @@ void TM1638Interface::displayMode(ExposureStatus status)
 uint8_t TM1638Interface::getButtons() 
 {   uint8_t buttons = tm1638_.readButtons();
 
-    Logger.log(MYLOG, ELOG_LEVEL_INFO, "read buttons: 0x%02X", buttons);
+    delay(300); // Add a small delay to debounce the buttons
+    //Logger.log(MYLOG, ELOG_LEVEL_INFO, "read buttons: 0x%02X", buttons);
     return buttons;
 }

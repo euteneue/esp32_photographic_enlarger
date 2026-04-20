@@ -1,6 +1,8 @@
 #ifndef EXPOSURE_STATUS_H
 #define EXPOSURE_STATUS_H
 
+#include "exposure_calculator.h"
+
 /**
  * @brief Operating mode for the enlarger
  */
@@ -11,20 +13,7 @@ enum class Mode
     FocusLight    /**< Focus light mode  */
 };
 
-/**
- * @brief Granularity for exposure adjustments
- */
-enum class Granularity 
-{
-    FullStops, /**< 1 stop increments */
-    Halfs,    /**< 1/2 stop increments */
-    Thirds,   /**< 1/3 stop increments */
-    Sixths,   /**< 1/6 stop increments */
-    Twelths   /**< 1/12 stop increments */
-};
 
-#define MIN_STEP -3  /**< Minimum step value */
-#define MAX_STEP 3   /**< Maximum step value */
 
 #define MIN_EXPOSURE_TIME 0     /**< Minimum exposure time in seconds */
 #define MAX_EXPOSURE_TIME 999   /**< Maximum exposure time in seconds */
