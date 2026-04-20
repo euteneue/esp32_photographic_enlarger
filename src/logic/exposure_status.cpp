@@ -32,13 +32,16 @@ Mode ExposureStatus::getMode() const
 
 void ExposureStatus::toggleMode() 
 {
-    if (mode == Mode::TestStrip) 
-    {
-        mode = Mode::Exposure;
-    } 
-    else 
-    {
-        mode = Mode::TestStrip;
+    switch (mode) {
+        case Mode::TestStrip:
+            mode = Mode::Exposure;
+            break;
+        case Mode::Exposure:
+            mode = Mode::FocusLight;
+            break;
+        case Mode::FocusLight:
+            mode = Mode::TestStrip;
+            break;
     }
 }
 

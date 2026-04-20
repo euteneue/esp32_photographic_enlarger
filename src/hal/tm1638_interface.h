@@ -68,7 +68,7 @@ public:
     void displayStep(ExposureStatus status);
 
     /**
-     * @brief Display the current mode (TestStrip or Exposure)
+     * @brief Display the current mode (TestStrip, Exposure or FocusLight)
      * @param status ExposureStatus containing mode data
      */
     void displayMode(ExposureStatus status);

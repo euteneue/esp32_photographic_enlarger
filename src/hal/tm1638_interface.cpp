@@ -62,8 +62,20 @@ void TM1638Interface::displayStep(ExposureStatus status)
 
 void TM1638Interface::displayMode(ExposureStatus status) 
 {
-    // Display the current mode (TestStrip or Exposure) on the display
-    const char* modeStr = (status.getMode() == Mode::TestStrip) ? "SEL:TEST" : "SEL:EXP";
+    // Display the current mode (TestStrip, Exposure or FocusLight) on the display
+    const char* modeStr = nullptr;
+
+    switch (status.getMode()) {
+        case Mode::TestStrip:
+            modeStr = "SEL:TEST";
+            break;
+        case Mode::Exposure:
+            modeStr = "SEL:EXP ";
+            break;
+        case Mode::FocusLight:
+            modeStr = "SEL:FOCU";
+            break;
+    }
 
     setDisplay(modeStr);
     

@@ -91,7 +91,20 @@ void inputHandler(void *pvParameters) {
             msg.type = MsgType::ENCODER_MODE_CHANGE;
             msg.payload = nullptr;
 
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the mode encoder, new mode: %s", timer->getStatus()->getMode() == Mode::TestStrip ? "TestStrip" : "Exposure");
+            const char* modeName = nullptr;
+            switch (timer->getStatus()->getMode()) {
+                case Mode::TestStrip:
+                    modeName = "TestStrip";
+                    break;
+                case Mode::Exposure:
+                    modeName = "Exposure";
+                    break;
+                case Mode::FocusLight:
+                    modeName = "FocusLight";
+                    break;
+            }
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the mode encoder, new mode: %s", modeName);
 
             xQueueSend(inputQueue, &msg, 0);
         }

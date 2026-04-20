@@ -4,9 +4,11 @@
 /**
  * @brief Operating mode for the enlarger
  */
-enum class Mode {
+enum class Mode 
+{
     TestStrip,  /**< Test strip mode for determining optimal exposure */
-    Exposure    /**< Normal exposure mode */
+    Exposure,    /**< Normal exposure mode */
+    FocusLight    /**< Focus light mode  */
 };
 
 /**
@@ -70,7 +72,7 @@ public:
 
     /**
      * @brief Get the current operating mode
-     * @return Current mode (TestStrip or Exposure)
+     * @return Current mode (TestStrip, Exposure or FocusLight)
      */
     Mode getMode() const;
 
