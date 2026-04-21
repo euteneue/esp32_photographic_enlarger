@@ -34,10 +34,12 @@
  */
 enum MsgType {
     MODE_BUTTON_PRESS,   /**< Mode button pressed on TM1638 */
+    FOOT_SWITCH_PRESS,    /**< Foot switch pressed (if applicable) */
     BUTTON_VALUE_PRESS,   /**< Value encoder button pressed */
     BUTTON_MODE_PRESS,    /**< Mode encoder button pressed */
     ENCODER_VALUE_CHANGE, /**< Value encoder rotation changed */
     ENCODER_MODE_CHANGE,   /**< Mode encoder rotation changed */
+    TIME_ELAPSED,          /**< Exposure timer has elapsed */
     TIME_TICK            /**< Timer tick event for exposure timing */
 };
 

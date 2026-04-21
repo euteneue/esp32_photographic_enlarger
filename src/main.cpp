@@ -217,25 +217,35 @@ void displayUpdate(void *pvParameters) {
                     break;
             }
         }
-        /*
+
+        // Update display based on FSM state
         State state = fsm.getCurrentState();
         char buffer[9];
         switch (state) {
-            case SET_BASE_TIME:
-                sprintf(buffer, "BT%4.1f", baseTime);
+            case INITIAL:
+                sprintf(buffer, "WELCOME");
                 break;
-            case SET_F_STOP:
-                sprintf(buffer, "FS%2d", currentFStop);
+            case FOCUS_LIGHT_OFF:
+                sprintf(buffer, "F-OFF");
                 break;
-            case CALCULATE_TIME:
-                sprintf(buffer, "CT%4.1f", calculatedTime);
+            case FOCUS_LIGHT_ON:
+                sprintf(buffer, "F-ON");
                 break;
-            case EXPOSE:
-                sprintf(buffer, "EX%4.1f", calculatedTime);
+            case TEST_STRIP_CONFIG:
+                sprintf(buffer, "TS-CONF");
+                break;
+            case TEST_STRIP_SEQUENCE:
+                sprintf(buffer, "TS-%d", fsm.getTestStripStep());
+                break;
+            case FSTOP_EXPOSURE_CONFIG:
+                sprintf(buffer, "EXP-CONF");
+                break;
+            case FSTOP_EXPOSURE:
+                sprintf(buffer, "EXPOSING");
                 break;
         }
-        //tm1638.setDisplay(buffer);
-        */
+        timer->getDisplay()->setDisplay(buffer);
+        
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -244,15 +254,39 @@ void exposureTimer(void *pvParameters)
 {
     while (true) 
     {
-        /*
-        if (fsm.getCurrentState() == EXPOSE) {
-            relay.on();
-            vTaskDelay(pdMS_TO_TICKS(calculatedTime * 1000));
-            relay.off();
-            // After exposure, go back to calculate
-            fsm.setState(CALCULATE_TIME);
+        State currentState = fsm.getCurrentState();
+        if (currentState == FSTOP_EXPOSURE) {
+            double exposureTime = ExposureCalculator::calculateExposureTime(
+                timer->getStatus()->getExposureTime(),
+                timer->getStatus()->getGranularity(),
+                timer->getStatus()->getStep()
+            );
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting F-Stop exposure for %.2f seconds", exposureTime);
+            timer->getRelay()->on();
+            vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
+            timer->getRelay()->off();
+            fsm.setState(FSTOP_EXPOSURE_CONFIG);
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
+        } else if (currentState == TEST_STRIP_SEQUENCE) {
+            double exposureTime = ExposureCalculator::calculateTestStripTime(
+                timer->getStatus()->getExposureTime(),
+                timer->getStatus()->getGranularity(),
+                fsm.getTestStripStep(),
+                false
+            );
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds", fsm.getTestStripStep(), exposureTime);
+            timer->getRelay()->on();
+            vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
+            timer->getRelay()->off();
+            fsm.advanceTestStrip();
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step completed");
+        } else if (currentState == FOCUS_LIGHT_ON) {
+            // Focus light is on, relay should be on
+            timer->getRelay()->on();
+        } else {
+            // For other states, ensure relay is off
+            timer->getRelay()->off();
         }
-            */
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -260,6 +294,8 @@ void exposureTimer(void *pvParameters)
 void stateManager(void *pvParameters) 
 {
     QueueItem *input = new QueueItem;
+    static int lastValuePos = 0;
+    static int lastModePos = 0;
 
     while (true) 
     {
@@ -267,65 +303,63 @@ void stateManager(void *pvParameters)
         {
             switch (input->type) {
                 case MsgType::BUTTON_VALUE_PRESS:
-                    //fsm.processInput(0); // next state
-                    
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button value pressed, transitioning to next state");
+                    // Handle value encoder button press if needed
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button value pressed");
                     break;
                 case MsgType::BUTTON_MODE_PRESS:
-                    //fsm.processInput(0); // next state
-                   
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button mode pressed, transitioning to next state");
+                    fsm.processInput(MsgType::BUTTON_MODE_PRESS);
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button mode pressed, processing FSM");
                     break;
                 case MsgType::ENCODER_VALUE_CHANGE:
-                    fsm.processInput(1); // adjust value up
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "encoder value changed, adjusting value up");
+                    {
+                        int currentPos = *(int*)input->payload;
+                        int direction = (currentPos > lastValuePos) ? 1 : ((currentPos < lastValuePos) ? -1 : 0);
+                        lastValuePos = currentPos;
+                        if (direction != 0) {
+                            State currentState = fsm.getCurrentState();
+                            if (currentState == TEST_STRIP_CONFIG || currentState == FSTOP_EXPOSURE_CONFIG) {
+                                double currentTime = timer->getStatus()->getExposureTime();
+                                currentTime += direction * 0.1f;
+                                if (currentTime < 0.1f) currentTime = 0.1f;
+                                if (currentTime > 999.0f) currentTime = 999.0f;
+                                timer->getStatus()->setExposureTime(currentTime);
+                                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted base time to %.1f", currentTime);
+                            }
+                        }
+                    }
                     break;
                 case MsgType::MODE_BUTTON_PRESS:
-                    //fsm.processInput(-1); // adjust value down
-                    timer->getStatus()->toggleMode();                       
-                    const char* modeName = nullptr;
-                    switch (timer->getStatus()->getMode()) {
-                        case Mode::TestStrip:
-                            modeName = "TestStrip";
-                            break;
-                        case Mode::Exposure:
-                            modeName = "Exposure";
-                            break;
-                        case Mode::FocusLight:
-                            modeName = "FocusLight";
-                            break;
+                    fsm.processInput(MsgType::MODE_BUTTON_PRESS);
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "mode button pressed, processing FSM");
+                    break;
+                case MsgType::ENCODER_MODE_CHANGE:
+                    {
+                        int currentPos = *(int*)input->payload;
+                        int direction = (currentPos > lastModePos) ? 1 : ((currentPos < lastModePos) ? -1 : 0);
+                        lastModePos = currentPos;
+                        if (direction != 0) {
+                            State currentState = fsm.getCurrentState();
+                            if (currentState == TEST_STRIP_CONFIG) {
+                                // Cycle granularity
+                                Granularity currentGran = timer->getStatus()->getGranularity();
+                                int granInt = static_cast<int>(currentGran);
+                                granInt += direction;
+                                if (granInt < 0) granInt = 4; // Twelths
+                                if (granInt > 4) granInt = 0; // FullStops
+                                timer->getStatus()->setGranularity(static_cast<Granularity>(granInt));
+                                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted granularity");
+                            } else if (currentState == FSTOP_EXPOSURE_CONFIG) {
+                                int currentStep = timer->getStatus()->getStep();
+                                currentStep += direction;
+                                if (currentStep < -3) currentStep = 3;
+                                if (currentStep > 3) currentStep = -3;
+                                timer->getStatus()->setStep(currentStep);
+                                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted step to %d", currentStep);
+                            }
+                        }
                     }
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode button, new mode: %s", modeName);
-
-                    xQueueSend(displayQueue, input, 0); // send to display task to update mode
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "mode button pressed, updating display to show new mode");
                     break;
             }
-
-
-            /*
-            State state = fsm.getCurrentState();
-            if (input == 0) { // button press
-                fsm.processInput(0); // next state
-            } else if (input == 1 || input == -1) {
-                // adjust values
-                switch (state) {
-                    case SET_BASE_TIME:
-                        baseTime += input * 0.1f;
-                        if (baseTime < 0.1f) baseTime = 0.1f;
-                        calculator.setBaseTime(baseTime);
-                        break;
-                    case SET_F_STOP:
-                        currentFStop += input;
-                        if (currentFStop < 1) currentFStop = 1;
-                        if (currentFStop > 22) currentFStop = 22;
-                        break;
-                    case CALCULATE_TIME:
-                        calculatedTime = calculator.calculateTime(currentFStop);
-                        break;
-                }
-            }
-            */
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }
