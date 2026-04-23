@@ -7,14 +7,14 @@
 
 #include "config.h"
 #include "logic/exposure_calculator.h"
-#include "logic/fsm.h"
+//#include "logic/fsm.h"
 #include "hal/exposure_timer.h"
 
 // Hardware instances
 ExposureTimer* timer;
 
 // Logic instances
-FSM fsm;
+//FSM fsm;
 
 // RTOS task handles
 TaskHandle_t inputHandlerTask;
@@ -113,13 +113,13 @@ void setup()
 
     // Create tasks
     xTaskCreate(inputHandler, "InputHandler", 2048, NULL, 2, &inputHandlerTask);
-    xTaskCreate(displayUpdate, "DisplayUpdate", 2048, NULL, 1, &displayUpdateTask);
-    xTaskCreate(exposureTimer, "ExposureTimer", 2048, NULL, 3, &exposureTimerTask);
+    xTaskCreate(displayUpdate, "DisplayUpdate", 2048, NULL, 3, &displayUpdateTask);
+    xTaskCreate(exposureTimer, "ExposureTimer", 2048, NULL, 1, &exposureTimerTask);
     xTaskCreate(stateManager, "StateManager", 2048, NULL, 1, &stateManagerTask);
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "finished initialization...");
 
-    testExposureCalculator();
+    //testExposureCalculator();
 }
 
 void loop() {
@@ -207,7 +207,7 @@ void displayUpdate(void *pvParameters) {
                     Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode");
                     break;
                 case MsgType::ENCODER_VALUE_CHANGE:
-                    if (timer->getStatus()->getMode() == Mode::TestStrip) {
+                    if (timer->getStatus()->getMode() == State::TEST_STRIP_CONFIG) {
                         timer->getDisplay()->displayTimeandStep(*timer->getStatus());
                         Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new time and step");
                     } else {
@@ -218,8 +218,8 @@ void displayUpdate(void *pvParameters) {
             }
         }
 
-        // Update display based on FSM state
-        State state = fsm.getCurrentState();
+        // Update display based on exposure timer state
+        State state = timer->getStatus()->getMode();
         char buffer[9];
         switch (state) {
             case INITIAL:
@@ -235,7 +235,7 @@ void displayUpdate(void *pvParameters) {
                 sprintf(buffer, "TS-CONF");
                 break;
             case TEST_STRIP_SEQUENCE:
-                sprintf(buffer, "TS-%d", fsm.getTestStripStep());
+                sprintf(buffer, "TS-%d", 0);
                 break;
             case FSTOP_EXPOSURE_CONFIG:
                 sprintf(buffer, "EXP-CONF");
@@ -254,7 +254,8 @@ void exposureTimer(void *pvParameters)
 {
     while (true) 
     {
-        State currentState = fsm.getCurrentState();
+        State currentState = timer->getStatus()->getMode();
+
         if (currentState == FSTOP_EXPOSURE) {
             double exposureTime = ExposureCalculator::calculateExposureTime(
                 timer->getStatus()->getExposureTime(),
@@ -265,22 +266,22 @@ void exposureTimer(void *pvParameters)
             timer->getRelay()->on();
             vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
             timer->getRelay()->off();
-            fsm.setState(FSTOP_EXPOSURE_CONFIG);
+            timer->getStatus()->setMode(State::FSTOP_EXPOSURE_CONFIG);
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
-        } else if (currentState == TEST_STRIP_SEQUENCE) {
+        } else if (currentState == State::TEST_STRIP_SEQUENCE) {
             double exposureTime = ExposureCalculator::calculateTestStripTime(
                 timer->getStatus()->getExposureTime(),
                 timer->getStatus()->getGranularity(),
-                fsm.getTestStripStep(),
+                timer->getStatus()->getStep(),
                 false
             );
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds", fsm.getTestStripStep(), exposureTime);
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds", timer->getStatus()->getStep(), exposureTime);
             timer->getRelay()->on();
             vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
             timer->getRelay()->off();
-            fsm.advanceTestStrip();
+            timer->getStatus()->setMode(State::TEST_STRIP_SEQUENCE);
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step completed");
-        } else if (currentState == FOCUS_LIGHT_ON) {
+        } else if (currentState == State::FOCUS_LIGHT_ON) {
             // Focus light is on, relay should be on
             timer->getRelay()->on();
         } else {
@@ -307,8 +308,8 @@ void stateManager(void *pvParameters)
                     Logger.log(MYLOG, ELOG_LEVEL_INFO, "button value pressed");
                     break;
                 case MsgType::BUTTON_MODE_PRESS:
-                    fsm.processInput(MsgType::BUTTON_MODE_PRESS);
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button mode pressed, processing FSM");
+                    timer->processInput(MsgType::BUTTON_MODE_PRESS);
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button mode pressed, processing finite state machine");
                     break;
                 case MsgType::ENCODER_VALUE_CHANGE:
                     {
@@ -316,8 +317,8 @@ void stateManager(void *pvParameters)
                         int direction = (currentPos > lastValuePos) ? 1 : ((currentPos < lastValuePos) ? -1 : 0);
                         lastValuePos = currentPos;
                         if (direction != 0) {
-                            State currentState = fsm.getCurrentState();
-                            if (currentState == TEST_STRIP_CONFIG || currentState == FSTOP_EXPOSURE_CONFIG) {
+                            State currentState = timer->getStatus()->getMode();
+                            if (currentState == State::TEST_STRIP_CONFIG || currentState == State::FSTOP_EXPOSURE_CONFIG) {
                                 double currentTime = timer->getStatus()->getExposureTime();
                                 currentTime += direction * 0.1f;
                                 if (currentTime < 0.1f) currentTime = 0.1f;
@@ -329,8 +330,8 @@ void stateManager(void *pvParameters)
                     }
                     break;
                 case MsgType::MODE_BUTTON_PRESS:
-                    fsm.processInput(MsgType::MODE_BUTTON_PRESS);
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "mode button pressed, processing FSM");
+                    timer->processInput(MsgType::MODE_BUTTON_PRESS);
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "mode button pressed, processing finite state machine");
                     break;
                 case MsgType::ENCODER_MODE_CHANGE:
                     {
@@ -338,8 +339,8 @@ void stateManager(void *pvParameters)
                         int direction = (currentPos > lastModePos) ? 1 : ((currentPos < lastModePos) ? -1 : 0);
                         lastModePos = currentPos;
                         if (direction != 0) {
-                            State currentState = fsm.getCurrentState();
-                            if (currentState == TEST_STRIP_CONFIG) {
+                            State currentState = timer->getStatus()->getMode();
+                            if (currentState == State::TEST_STRIP_CONFIG) {
                                 // Cycle granularity
                                 Granularity currentGran = timer->getStatus()->getGranularity();
                                 int granInt = static_cast<int>(currentGran);
@@ -348,7 +349,7 @@ void stateManager(void *pvParameters)
                                 if (granInt > 4) granInt = 0; // FullStops
                                 timer->getStatus()->setGranularity(static_cast<Granularity>(granInt));
                                 Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted granularity");
-                            } else if (currentState == FSTOP_EXPOSURE_CONFIG) {
+                            } else if (currentState == State::FSTOP_EXPOSURE_CONFIG) {
                                 int currentStep = timer->getStatus()->getStep();
                                 currentStep += direction;
                                 if (currentStep < -3) currentStep = 3;

@@ -1,14 +1,16 @@
 #include "exposure_status.h"
+#include "config.h"
+
 
 // Constructors
-ExposureStatus::ExposureStatus(double exposureTime, int step, Mode mode, Granularity granularity) 
+ExposureStatus::ExposureStatus(double exposureTime, int step, State mode, Granularity granularity) 
     : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity) 
     {
 
     }
     
     
-ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(Mode::TestStrip), granularity(Granularity::Halfs) 
+ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs) 
     {
 
     }
@@ -25,25 +27,11 @@ int ExposureStatus::getStep() const
     return step;
 }
 
-Mode ExposureStatus::getMode() const 
+State ExposureStatus::getMode() const 
 {
     return mode;
 }
 
-void ExposureStatus::toggleMode() 
-{
-    switch (mode) {
-        case Mode::TestStrip:
-            mode = Mode::Exposure;
-            break;
-        case Mode::Exposure:
-            mode = Mode::FocusLight;
-            break;
-        case Mode::FocusLight:
-            mode = Mode::TestStrip;
-            break;
-    }
-}
 
 Granularity ExposureStatus::getGranularity() const {
     return granularity;
@@ -67,7 +55,7 @@ void ExposureStatus::setStep(int step)
     }
 }
 
-void ExposureStatus::setMode(Mode mode) 
+void ExposureStatus::setMode(State mode) 
 {
     this->mode = mode;
 }
@@ -76,7 +64,7 @@ void ExposureStatus::setGranularity(Granularity granularity)
 {
     // Only allow setting granularity if the mode is TestStrip -> once in Exposure mode, the granularity is 
     // fixed to what it was when the mode was switched from TestStrip to Exposure
-    if (this->mode == Mode::TestStrip) 
+    if (this->mode == State::TEST_STRIP_CONFIG) 
     {
         this->granularity = granularity;
     }

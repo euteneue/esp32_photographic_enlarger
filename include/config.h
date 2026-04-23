@@ -26,6 +26,13 @@
 
 #define MYLOG 0
 
+#define MIN_STEP -3  /**< Minimum step value */
+#define MAX_STEP 3   /**< Maximum step value */
+
+#define MIN_EXPOSURE_TIME 0     /**< Minimum exposure time in seconds */
+#define MAX_EXPOSURE_TIME 999   /**< Maximum exposure time in seconds */
+
+
 /**
  * @brief Message type codes for input and control events
  *
@@ -41,6 +48,21 @@ enum MsgType {
     ENCODER_MODE_CHANGE,   /**< Mode encoder rotation changed */
     TIME_ELAPSED,          /**< Exposure timer has elapsed */
     TIME_TICK            /**< Timer tick event for exposure timing */
+};
+
+/**
+ * @brief States for the finite state machine
+ */
+enum State {
+    INITIAL,                /**< Initial state with welcome message */
+    FOCUS_LIGHT_OFF,        /**< Focus light is off */
+    FOCUS_LIGHT_ON,         /**< Focus light is on */
+    TEST_STRIP_CONFIG,      /**< Configuring test strip parameters */
+    TEST_STRIP_SEQUENCE,    /**< Running test strip exposure sequence */
+    FSTOP_EXPOSURE_CONFIG,  /**< Configuring f-stop exposure parameters */
+    FSTOP_EXPOSURE,          /**< Performing f-stop exposure */
+    TIME_EXPOSURE_CONFIG,   /**< Configuring time-based exposure parameters */
+    TIME_EXPOSURE           /**< Performing time-based exposure */
 };
 
 /**

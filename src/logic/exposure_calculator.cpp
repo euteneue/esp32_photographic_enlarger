@@ -1,5 +1,6 @@
 #include "exposure_calculator.h"
 #include <cmath>
+#include "config.h"
 
 ExposureCalculator::ExposureCalculator() {
     // Default constructor can be empty since we are using static methods

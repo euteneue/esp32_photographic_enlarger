@@ -66,13 +66,16 @@ void TM1638Interface::displayMode(ExposureStatus status)
     const char* modeStr = nullptr;
 
     switch (status.getMode()) {
-        case Mode::TestStrip:
+        case State::INITIAL:
+            modeStr = "WELCOME";
+            break;
+        case State::TEST_STRIP_CONFIG:
             modeStr = "SEL:TEST";
             break;
-        case Mode::Exposure:
+        case State::FSTOP_EXPOSURE_CONFIG:
             modeStr = "SEL:EXP ";
             break;
-        case Mode::FocusLight:
+        case State::FOCUS_LIGHT_OFF:
             modeStr = "SEL:FOCU";
             break;
     }

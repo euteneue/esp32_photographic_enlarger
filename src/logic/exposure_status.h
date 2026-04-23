@@ -2,21 +2,8 @@
 #define EXPOSURE_STATUS_H
 
 #include "exposure_calculator.h"
+#include "config.h"
 
-/**
- * @brief Operating mode for the enlarger
- */
-enum class Mode 
-{
-    TestStrip,  /**< Test strip mode for determining optimal exposure */
-    Exposure,    /**< Normal exposure mode */
-    FocusLight    /**< Focus light mode  */
-};
-
-
-
-#define MIN_EXPOSURE_TIME 0     /**< Minimum exposure time in seconds */
-#define MAX_EXPOSURE_TIME 999   /**< Maximum exposure time in seconds */
 
 /**
  * @brief Class representing the current exposure status and settings
@@ -29,7 +16,7 @@ class ExposureStatus
 private:
     double exposureTime;  /**< Current exposure time in seconds */
     int step;             /**< Current step adjustment (-3 to +3) */
-    Mode mode;            /**< Current operating mode */
+    State mode;            /**< Current operating mode */
     Granularity granularity; /**< Current adjustment granularity */
 
 public:
@@ -40,7 +27,7 @@ public:
      * @param mode Initial operating mode
      * @param granularity Initial adjustment granularity
      */
-    ExposureStatus(double exposureTime, int step, Mode mode, Granularity granularity);
+    ExposureStatus(double exposureTime, int step, State mode, Granularity granularity);
 
     /**
      * @brief Construct a new ExposureStatus object with default values
@@ -63,7 +50,7 @@ public:
      * @brief Get the current operating mode
      * @return Current mode (TestStrip, Exposure or FocusLight)
      */
-    Mode getMode() const;
+    State getMode() const;
 
     /**
      * @brief Get the current adjustment granularity
@@ -74,7 +61,7 @@ public:
     /**
      * @brief Toggle between TestStrip and Exposure modes
      */
-    void toggleMode();
+    //void toggleMode();
 
     /**
      * @brief Set the exposure time
@@ -92,7 +79,7 @@ public:
      * @brief Set the operating mode
      * @param mode New operating mode
      */
-    void setMode(Mode mode);
+    void setMode(State mode);
 
     /**
      * @brief Set the adjustment granularity

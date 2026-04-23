@@ -107,6 +107,13 @@ public:
      */
     ExposureStatus* getStatus() const;
 
+
+    /**
+     * @brief Process user input and transition states accordingly
+     * @param event User event
+     */
+    void processInput(MsgType event);
+
 private:
     /**
      * @brief Construct a new ExposureTimer object
@@ -128,6 +135,7 @@ private:
     bool exposing_;                             /**< Flag indicating if exposure is active */
     float remainingTimeMs_;                     /**< Remaining exposure time in milliseconds */
     unsigned long lastTickMs_;                  /**< Timestamp of last tick for timing calculations */
+ 
 
     static void IRAM_ATTR readEncoderModeISR();
     static void IRAM_ATTR readEncoderValueISR();

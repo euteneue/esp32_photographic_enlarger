@@ -14,8 +14,6 @@ enum class Granularity
     Twelths   /**< 1/12 stop increments */
 };
 
-#define MIN_STEP -3  /**< Minimum step value */
-#define MAX_STEP 3   /**< Maximum step value */
 
 /**
  * @brief Class for calculating photographic exposure times

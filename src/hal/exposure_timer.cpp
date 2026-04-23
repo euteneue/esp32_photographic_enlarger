@@ -148,3 +148,63 @@ void ExposureTimer::cancel() {
         remainingTimeMs_ = 0;
     }
 }
+
+/**
+ * @brief Process input events and update the exposure timer state accordingly
+ * 
+ * @param event The input event to process
+ */
+void ExposureTimer::processInput(MsgType event) {
+    switch (status_->getMode()) {
+        case State::INITIAL:
+            if (event == MsgType::MODE_BUTTON_PRESS) {
+                status_->setMode(State::FOCUS_LIGHT_OFF);
+            }
+            break;
+        case State::FOCUS_LIGHT_OFF:
+            if (event == MsgType::BUTTON_MODE_PRESS) {
+                status_->setMode(State::FOCUS_LIGHT_ON);
+            } else if (event == MsgType::MODE_BUTTON_PRESS) {
+                status_->setMode(State::TEST_STRIP_CONFIG);
+            }
+            break;
+        case State::FOCUS_LIGHT_ON:
+            if (event == MsgType::BUTTON_MODE_PRESS) {
+                status_->setMode(State::FOCUS_LIGHT_OFF);
+            }
+            break;
+        case State::TEST_STRIP_CONFIG:
+            if (event == MsgType::BUTTON_MODE_PRESS) {
+                status_->setMode(State::TEST_STRIP_SEQUENCE);
+                status_->setStep(MIN_STEP);
+            } else if (event == MsgType::MODE_BUTTON_PRESS) {
+                status_->setMode(State::FSTOP_EXPOSURE_CONFIG);
+            }
+            break;
+        case State::TEST_STRIP_SEQUENCE:
+            // Events handled externally for sequence advancement
+            break;
+        case State::FSTOP_EXPOSURE_CONFIG:
+            if (event == MsgType::BUTTON_MODE_PRESS) {
+                status_->setMode(State::FSTOP_EXPOSURE);
+            } else if (event == MsgType::MODE_BUTTON_PRESS) {
+                status_->setMode(State::TIME_EXPOSURE_CONFIG);
+            }
+            break;
+        case State::FSTOP_EXPOSURE:
+            // Automatic transition back handled externally
+            break;
+        
+        case State::TIME_EXPOSURE_CONFIG:
+            if (event == MsgType::BUTTON_MODE_PRESS) {
+                status_->setMode(State::TIME_EXPOSURE);
+            } else if (event == MsgType::MODE_BUTTON_PRESS) {
+                status_->setMode(State::FOCUS_LIGHT_OFF);
+            }
+            break;
+        case State::TIME_EXPOSURE:
+            // Automatic transition back handled externally
+            break;  
+    }
+}
+
