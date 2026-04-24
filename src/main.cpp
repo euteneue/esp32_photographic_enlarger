@@ -26,6 +26,8 @@ TaskHandle_t stateManagerTask;
 QueueHandle_t inputQueue;
 QueueHandle_t displayQueue;
 
+SemaphoreHandle_t tm1638Mutex;
+
 // Shared variables
 float baseTime = BASE_TIME_DEFAULT;
 int baseFStop = BASE_FSTOP_DEFAULT;
@@ -89,27 +91,35 @@ void testExposureCalculator()
 
 void setup() 
 {
+    QueueItem *msg = new QueueItem();
+
     Serial.begin(115200);
     Logger.registerSerial(MYLOG, ELOG_LEVEL_DEBUG, "DarkroomTimer", Serial);
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Darkroom Timer...");
-
-
-    Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing peripherals...");
-    timer = &ExposureTimer::getInstance(new ExposureStatus(),
-                              new Relay(RELAY_PIN), 
-                              new AiEsp32RotaryEncoder(ENCODER1_DT, ENCODER1_CLK, ENCODER1_SW, ENCODER1_VCC, ENCODER1_STEPS), 
-                              new AiEsp32RotaryEncoder(ENCODER2_DT, ENCODER2_CLK, ENCODER2_SW, ENCODER2_VCC, ENCODER2_STEPS), 
-                              new TM1638Interface(TM1638_DIO, TM1638_CLK, TM1638_STB));
-
-
-    Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing rotary encoders...");                              
-    timer->setup();
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "creating queues and tasks...");
 
     // Create queues
     inputQueue = xQueueCreate(10, sizeof(QueueItem));
     displayQueue = xQueueCreate(10, sizeof(QueueItem));
+
+    // Create mutex to serialize TM1638 display / button access. This is necessary because the display and 
+    // button handling code in the TM1638 library is not thread safe, and we need to ensure that only one 
+    // task is accessing the display/buttons at a time to prevent race conditions and potential crashes.
+    tm1638Mutex = xSemaphoreCreateMutex();
+
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing peripherals...");
+    timer = &ExposureTimer::getInstance(new ExposureStatus(),
+                              new Relay(RELAY_PIN), 
+                              new AiEsp32RotaryEncoder(ENCODER1_DT, ENCODER1_CLK, ENCODER1_SW, ENCODER1_VCC, ENCODER1_STEPS), 
+                              new AiEsp32RotaryEncoder(ENCODER2_DT, ENCODER2_CLK, ENCODER2_SW, ENCODER2_VCC, ENCODER2_STEPS), 
+                              new TM1638Interface(TM1638_DIO, TM1638_CLK, TM1638_STB, tm1638Mutex),
+                              inputQueue,
+                              displayQueue);
+
+
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing rotary encoders...");                              
+    timer->setup();    
 
     // Create tasks
     xTaskCreate(inputHandler, "InputHandler", 2048, NULL, 2, &inputHandlerTask);
@@ -119,7 +129,7 @@ void setup()
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "finished initialization...");
 
-    //testExposureCalculator();
+     //testExposureCalculator();
 }
 
 void loop() {
@@ -150,8 +160,11 @@ void inputHandler(void *pvParameters) {
         // - user has turned the mode encoder
         if (timer->getEncoderMode()->encoderChanged()) 
         {
+            int value = timer->getEncoderMode()->readEncoder();
+
             msg.type = MsgType::ENCODER_MODE_CHANGE;
-            msg.payload = nullptr;
+            msg.payload = &value;
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", value);
 
             xQueueSend(inputQueue, &msg, 0);
         }
@@ -170,7 +183,7 @@ void inputHandler(void *pvParameters) {
         }
 
         if (timer->getEncoderMode()->isEncoderButtonClicked()) 
-        {
+        {            
             msg.type = MsgType::BUTTON_MODE_PRESS;
             msg.payload = nullptr;
 
@@ -197,14 +210,26 @@ void displayUpdate(void *pvParameters) {
     QueueItem *msg = new QueueItem;
 
     while (true) 
-    {
+    {        
+        timer->getDisplay()->setDisplay(timer->getDisplayBuffer());
+
+        /*
         if (xQueueReceive(displayQueue, msg, portMAX_DELAY)) 
         {
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "received message to update display");
+
+            timer->getDisplay()->displayMode(*timer->getStatus());
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode %d", timer->getStatus()->getMode());
+
+            
             switch (msg->type) {
+                case MsgType::MODE_CHANGED:
+                    timer->getDisplay()->displayMode(*timer->getStatus());
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode %d", timer->getStatus()->getMode());
+                    break;                
                 case MsgType::MODE_BUTTON_PRESS:
                     timer->getDisplay()->displayMode(*timer->getStatus());
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode");
+                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode %d", timer->getStatus()->getMode());
                     break;
                 case MsgType::ENCODER_VALUE_CHANGE:
                     if (timer->getStatus()->getMode() == State::TEST_STRIP_CONFIG) {
@@ -216,35 +241,9 @@ void displayUpdate(void *pvParameters) {
                     }
                     break;
             }
+            
         }
-
-        // Update display based on exposure timer state
-        State state = timer->getStatus()->getMode();
-        char buffer[9];
-        switch (state) {
-            case INITIAL:
-                sprintf(buffer, "WELCOME");
-                break;
-            case FOCUS_LIGHT_OFF:
-                sprintf(buffer, "F-OFF");
-                break;
-            case FOCUS_LIGHT_ON:
-                sprintf(buffer, "F-ON");
-                break;
-            case TEST_STRIP_CONFIG:
-                sprintf(buffer, "TS-CONF");
-                break;
-            case TEST_STRIP_SEQUENCE:
-                sprintf(buffer, "TS-%d", 0);
-                break;
-            case FSTOP_EXPOSURE_CONFIG:
-                sprintf(buffer, "EXP-CONF");
-                break;
-            case FSTOP_EXPOSURE:
-                sprintf(buffer, "EXPOSING");
-                break;
-        }
-        timer->getDisplay()->setDisplay(buffer);
+        */
         
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -302,65 +301,7 @@ void stateManager(void *pvParameters)
     {
         if (xQueueReceive(inputQueue, input, portMAX_DELAY)) 
         {
-            switch (input->type) {
-                case MsgType::BUTTON_VALUE_PRESS:
-                    // Handle value encoder button press if needed
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button value pressed");
-                    break;
-                case MsgType::BUTTON_MODE_PRESS:
-                    timer->processInput(MsgType::BUTTON_MODE_PRESS);
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "button mode pressed, processing finite state machine");
-                    break;
-                case MsgType::ENCODER_VALUE_CHANGE:
-                    {
-                        int currentPos = *(int*)input->payload;
-                        int direction = (currentPos > lastValuePos) ? 1 : ((currentPos < lastValuePos) ? -1 : 0);
-                        lastValuePos = currentPos;
-                        if (direction != 0) {
-                            State currentState = timer->getStatus()->getMode();
-                            if (currentState == State::TEST_STRIP_CONFIG || currentState == State::FSTOP_EXPOSURE_CONFIG) {
-                                double currentTime = timer->getStatus()->getExposureTime();
-                                currentTime += direction * 0.1f;
-                                if (currentTime < 0.1f) currentTime = 0.1f;
-                                if (currentTime > 999.0f) currentTime = 999.0f;
-                                timer->getStatus()->setExposureTime(currentTime);
-                                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted base time to %.1f", currentTime);
-                            }
-                        }
-                    }
-                    break;
-                case MsgType::MODE_BUTTON_PRESS:
-                    timer->processInput(MsgType::MODE_BUTTON_PRESS);
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "mode button pressed, processing finite state machine");
-                    break;
-                case MsgType::ENCODER_MODE_CHANGE:
-                    {
-                        int currentPos = *(int*)input->payload;
-                        int direction = (currentPos > lastModePos) ? 1 : ((currentPos < lastModePos) ? -1 : 0);
-                        lastModePos = currentPos;
-                        if (direction != 0) {
-                            State currentState = timer->getStatus()->getMode();
-                            if (currentState == State::TEST_STRIP_CONFIG) {
-                                // Cycle granularity
-                                Granularity currentGran = timer->getStatus()->getGranularity();
-                                int granInt = static_cast<int>(currentGran);
-                                granInt += direction;
-                                if (granInt < 0) granInt = 4; // Twelths
-                                if (granInt > 4) granInt = 0; // FullStops
-                                timer->getStatus()->setGranularity(static_cast<Granularity>(granInt));
-                                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted granularity");
-                            } else if (currentState == State::FSTOP_EXPOSURE_CONFIG) {
-                                int currentStep = timer->getStatus()->getStep();
-                                currentStep += direction;
-                                if (currentStep < -3) currentStep = 3;
-                                if (currentStep > 3) currentStep = -3;
-                                timer->getStatus()->setStep(currentStep);
-                                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted step to %d", currentStep);
-                            }
-                        }
-                    }
-                    break;
-            }
+            timer->processInput(input->type, input->payload);
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }

@@ -1,5 +1,6 @@
 #include "exposure_timer.h"
 #include <Arduino.h>
+#include <ELog.h>
 
 // Initialize static instance
 ExposureTimer* ExposureTimer::instance_ = nullptr;
@@ -7,11 +8,13 @@ ExposureTimer* ExposureTimer::instance_ = nullptr;
 ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay, 
                                          AiEsp32RotaryEncoder* encoderValue, 
                                          AiEsp32RotaryEncoder* encoderMode, 
-                                         TM1638Interface* display) {
+                                         TM1638Interface* display, 
+                                         QueueHandle_t inputQueue, 
+                                         QueueHandle_t displayQueue) {
     if (instance_ == nullptr) {
         // Create instance only if it doesn't exist and we have all required parameters
         if (status && relay && encoderValue && encoderMode && display) {
-            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display);
+            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, inputQueue, displayQueue);
         } else {
             // If instance doesn't exist but parameters are null, this is an error
             // In a real implementation, you might want to handle this differently
@@ -22,8 +25,8 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
 }
 
 
-ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display)
-    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), exposing_(false), remainingTimeMs_(0), lastTickMs_(0) 
+ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, QueueHandle_t inputQueue, QueueHandle_t displayQueue)
+    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), inputQueue_(inputQueue), displayQueue_(displayQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
 {
 
 }
@@ -54,13 +57,14 @@ void ExposureTimer::setup()
     //set boundaries and if values should cycle or not
     //in this example we will set possible values between 0 and 1000;
     
-    encoderMode_->setBoundaries(0, 1, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
+    encoderMode_->setBoundaries(0, 4, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
     encoderValue_->setBoundaries(0, 999, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
 
     encoderMode_->setAcceleration(0); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
     encoderValue_->setAcceleration(250); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
 
     display_->setBrightness(0);
+    displayMode();
 }
 
 
@@ -149,28 +153,138 @@ void ExposureTimer::cancel() {
     }
 }
 
+void ExposureTimer::refreshDisplay() 
+{
+    // This function can be called to update the display based on the current status
+    // For example, it could show remaining time during an exposure, or current mode/step when not exposing
+
+    msg_.type = MsgType::MODE_CHANGED;
+    msg_.payload = nullptr;
+    xQueueSend(displayQueue_, &msg_, 0);
+}
+
+void ExposureTimer::displayMode() 
+{
+    // Display the current mode (TestStrip, Exposure or FocusLight) on the display
+    
+    switch (status_->getMode()) {
+        case State::INITIAL:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "WELCOME ");
+            break;
+        case State::FOCUS_LIGHT_OFF:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "FOCUS OF");
+            break;
+        case State::FOCUS_LIGHT_ON:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "FOCUS ON");
+            break;
+        case State::TEST_STRIP_CONFIG:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "STRPCONF");
+            break;
+        case State::TEST_STRIP_SEQUENCE:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "");
+            break;
+        case State::FSTOP_EXPOSURE_CONFIG:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "FSTP EXP");
+            break;
+        case State::FSTOP_EXPOSURE:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "");
+            break;
+        case State::TIME_EXPOSURE_CONFIG:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "TImE EXP");
+            break;
+        case State::TIME_EXPOSURE:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "");
+            break;
+        default:
+            snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "");
+            break;
+    }
+}
+
+
+
+void ExposureTimer::displayTimeandGranularity() 
+{
+    char granularityBuffer[5];
+    switch (status_->getGranularity()) {
+        case Granularity::FullStops:
+            snprintf(granularityBuffer, sizeof(granularityBuffer), "   1");
+            break;
+        case Granularity::Halfs:
+            snprintf(granularityBuffer, sizeof(granularityBuffer), " 1/2");
+            break;
+        case Granularity::Thirds:
+            snprintf(granularityBuffer, sizeof(granularityBuffer), " 1/3");
+            break;
+        case Granularity::Sixths:
+            snprintf(granularityBuffer, sizeof(granularityBuffer), " 1/6");
+            break;
+        case Granularity::Twelths:
+            snprintf(granularityBuffer, sizeof(granularityBuffer), "1/12");
+            break;
+        default:
+            snprintf(granularityBuffer, sizeof(granularityBuffer), "   ?");
+            break;
+    }
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, " %4.1f%s", status_->getExposureTime(), granularityBuffer);
+    
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
+}
+
+void ExposureTimer::displayTimeandStep() 
+{
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, " %4.1f %+2d", status_->getExposureTime(), status_->getStep());
+    
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
+}
+
+void ExposureTimer::displayTime() 
+{
+    // Display the exposure time on the first 4 digits, and blank the last 4 digits
+
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "time: %4.1f ", status_->getExposureTime());
+
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
+}
+
+void ExposureTimer::displayStep() 
+{
+    // Display the step on the last 4 digits, and blank the first 4 digits
+
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "step: %+2d ", status_->getStep());
+        
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
+}
+
+
 /**
  * @brief Process input events and update the exposure timer state accordingly
  * 
  * @param event The input event to process
+ * @param payload Optional pointer to additional data (for example encoder value) associated with the event
  */
-void ExposureTimer::processInput(MsgType event) {
+void ExposureTimer::processInput(MsgType event, void *payload) 
+{
     switch (status_->getMode()) {
         case State::INITIAL:
             if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
+                displayMode();
             }
             break;
         case State::FOCUS_LIGHT_OFF:
             if (event == MsgType::BUTTON_MODE_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_ON);
+                displayMode();
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::TEST_STRIP_CONFIG);
+                displayMode();
             }
             break;
         case State::FOCUS_LIGHT_ON:
             if (event == MsgType::BUTTON_MODE_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
+                displayMode();
             }
             break;
         case State::TEST_STRIP_CONFIG:
@@ -179,6 +293,18 @@ void ExposureTimer::processInput(MsgType event) {
                 status_->setStep(MIN_STEP);
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FSTOP_EXPOSURE_CONFIG);
+                displayMode();
+            } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
+                status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
+                display_->clear();
+                displayTimeandGranularity();
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted base time to %.1f", status_->getExposureTime());
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "new display buffer: %s", getDisplayBuffer());
+            } else if (event == MsgType::ENCODER_MODE_CHANGE) {
+                status_->setGranularity(static_cast<Granularity>(*(long *) payload));
+                display_->clear();
+                displayTimeandGranularity();
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted granularity to %d", static_cast<int>(status_->getGranularity()));
             }
             break;
         case State::TEST_STRIP_SEQUENCE:
@@ -189,6 +315,7 @@ void ExposureTimer::processInput(MsgType event) {
                 status_->setMode(State::FSTOP_EXPOSURE);
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
+                displayMode();
             }
             break;
         case State::FSTOP_EXPOSURE:
@@ -200,6 +327,7 @@ void ExposureTimer::processInput(MsgType event) {
                 status_->setMode(State::TIME_EXPOSURE);
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
+                displayMode();
             }
             break;
         case State::TIME_EXPOSURE:
@@ -208,3 +336,7 @@ void ExposureTimer::processInput(MsgType event) {
     }
 }
 
+const char *ExposureTimer::getDisplayBuffer() const
+{
+    return displayBuffer_;
+}

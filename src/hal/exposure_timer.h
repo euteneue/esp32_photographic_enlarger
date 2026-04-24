@@ -6,6 +6,7 @@
 #include "tm1638_interface.h"
 #include <Arduino.h>
 #include <AiEsp32RotaryEncoder.h>
+#include "config.h"
 
 /**
  * @brief Class for managing photographic exposure timing
@@ -23,12 +24,16 @@ public:
      * @param encoderValue Pointer to the rotary encoder instance for value adjustment
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
+     * @param inputQueue Queue handle for simulating input events from state manager
+     * @param displayQueue Queue handle for sending display update messages to display manager
      * @return Reference to the singleton ExposureTimer instance
      */
     static ExposureTimer& getInstance(ExposureStatus* status = nullptr, Relay* relay = nullptr, 
                                      AiEsp32RotaryEncoder* encoderValue = nullptr, 
                                      AiEsp32RotaryEncoder* encoderMode = nullptr, 
-                                     TM1638Interface* display = nullptr);
+                                     TM1638Interface* display = nullptr,
+                                     QueueHandle_t inputQueue = nullptr, 
+                                     QueueHandle_t displayQueue = nullptr);
 
 
     /**
@@ -111,8 +116,16 @@ public:
     /**
      * @brief Process user input and transition states accordingly
      * @param event User event
+     * @param payload Optional pointer to additional data (for example encoder value)
      */
-    void processInput(MsgType event);
+    void processInput(MsgType event, void *payload = nullptr);
+
+    /**
+     * @brief Get the Display Buffer object for formatting display strings
+     * 
+     * @return char* Pointer to the display buffer
+     */
+    const char *getDisplayBuffer() const;
 
 private:
     /**
@@ -122,8 +135,20 @@ private:
      * @param encoderValue Pointer to the rotary encoder instance for value adjustment
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
+     * @param inputQueue Queue handle for simulating input events from state manager
+     * @param displayQueue Queue handle for sending display update messages to display manager
      */
-    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display);
+    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, QueueHandle_t inputQueue, QueueHandle_t displayQueue);
+
+    void displayMode();
+
+    void displayTimeandGranularity();
+
+    void displayTimeandStep();
+
+    void displayTime();
+
+    void displayStep();
 
     static ExposureTimer* instance_; /**< Static singleton instance pointer */
 
@@ -135,10 +160,18 @@ private:
     bool exposing_;                             /**< Flag indicating if exposure is active */
     float remainingTimeMs_;                     /**< Remaining exposure time in milliseconds */
     unsigned long lastTickMs_;                  /**< Timestamp of last tick for timing calculations */
+    QueueItem msg_;                              /**< Queue item for sending messages from state manager, e.g. to the DisplayManager or the ExposureTimer */
+    // Queues for inter-task communication
+    QueueHandle_t inputQueue_;                  /**< Queue for simulating input events from state manager */
+    QueueHandle_t displayQueue_;                /**< Queue for sending display update messages to display manager */   
+
+    char displayBuffer_[MAX_DISPLAY_STR_LEN+1]; /**< Buffer for formatting display strings */
  
 
     static void IRAM_ATTR readEncoderModeISR();
     static void IRAM_ATTR readEncoderValueISR();
+
+    void refreshDisplay();
 
 };
 
