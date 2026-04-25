@@ -114,6 +114,7 @@ void setup()
                               new AiEsp32RotaryEncoder(ENCODER1_DT, ENCODER1_CLK, ENCODER1_SW, ENCODER1_VCC, ENCODER1_STEPS), 
                               new AiEsp32RotaryEncoder(ENCODER2_DT, ENCODER2_CLK, ENCODER2_SW, ENCODER2_VCC, ENCODER2_STEPS), 
                               new TM1638Interface(TM1638_DIO, TM1638_CLK, TM1638_STB, tm1638Mutex),
+                              new Beeper(BEEPER_PIN),
                               inputQueue,
                               displayQueue);
 
@@ -148,7 +149,7 @@ void inputHandler(void *pvParameters) {
     {
         uint8_t tmButtons = timer->getDisplay()->getButtons();
 
-        if (tmButtons & MODE_BUTTON) // Mode button is the first bit
+        if (tmButtons & MODE_BUTTON) // Mode button has been pressed
         {
             msg.type = MsgType::MODE_BUTTON_PRESS;
             msg.payload = nullptr;
@@ -157,6 +158,27 @@ void inputHandler(void *pvParameters) {
 
             xQueueSend(inputQueue, &msg, 0);
         }
+
+        if (tmButtons & CANCEL_BUTTON) // Cancel button has been pressed
+        {
+            msg.type = MsgType::CANCEL_BUTTON_PRESS;
+            msg.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the cancel button");
+
+            xQueueSend(inputQueue, &msg, 0);
+        }
+
+        if (tmButtons & ITERATIVE_BUTTON) // Iterative button has been pressed
+        {
+            msg.type = MsgType::ITERATIVE_BUTTON_PRESS;
+            msg.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the iterative button");
+
+            xQueueSend(inputQueue, &msg, 0);
+        }        
+
         // - user has turned the mode encoder
         if (timer->getEncoderMode()->encoderChanged()) 
         {
@@ -209,42 +231,18 @@ void inputHandler(void *pvParameters) {
 void displayUpdate(void *pvParameters) {
     QueueItem *msg = new QueueItem;
 
+    // The displayUpdate task basically only takes the latest display buffer and transmits it
+    // to the TM1638 display. The display buffer is updated by the state manager task whenever there 
+    // is a change in the system state that requires a display update (for example mode change, 
+    // encoder value change, timer tick etc.). The displayUpdate task runs in an infinite loop and updates 
+    // the display at a regular interval (for example every 100ms) to ensure that any changes to the 
+    // display buffer are reflected on the TM1638 in a timely manner. This separation of concerns 
+    // allows the state manager to focus on managing the system state and preparing the display 
+    // buffer, while the displayUpdate task handles the actual communication with the TM1638 display.
     while (true) 
-    {        
+    {
         timer->getDisplay()->setDisplay(timer->getDisplayBuffer());
 
-        /*
-        if (xQueueReceive(displayQueue, msg, portMAX_DELAY)) 
-        {
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "received message to update display");
-
-            timer->getDisplay()->displayMode(*timer->getStatus());
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode %d", timer->getStatus()->getMode());
-
-            
-            switch (msg->type) {
-                case MsgType::MODE_CHANGED:
-                    timer->getDisplay()->displayMode(*timer->getStatus());
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode %d", timer->getStatus()->getMode());
-                    break;                
-                case MsgType::MODE_BUTTON_PRESS:
-                    timer->getDisplay()->displayMode(*timer->getStatus());
-                    Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new mode %d", timer->getStatus()->getMode());
-                    break;
-                case MsgType::ENCODER_VALUE_CHANGE:
-                    if (timer->getStatus()->getMode() == State::TEST_STRIP_CONFIG) {
-                        timer->getDisplay()->displayTimeandStep(*timer->getStatus());
-                        Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new time and step");
-                    } else {
-                        timer->getDisplay()->displayTime(*timer->getStatus());
-                        Logger.log(MYLOG, ELOG_LEVEL_INFO, "display updated to show new time");
-                    }
-                    break;
-            }
-            
-        }
-        */
-        
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -267,19 +265,37 @@ void exposureTimer(void *pvParameters)
             timer->getRelay()->off();
             timer->getStatus()->setMode(State::FSTOP_EXPOSURE_CONFIG);
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
+        } else if (currentState == TIME_EXPOSURE) {
+            double exposureTime = timer->getStatus()->getExposureTime();
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Time-based exposure for %.2f seconds", exposureTime);
+            timer->getRelay()->on();
+            vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
+            timer->getRelay()->off();
+            timer->getStatus()->setMode(State::TIME_EXPOSURE_CONFIG);
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Time-based exposure completed");
         } else if (currentState == State::TEST_STRIP_SEQUENCE) {
             double exposureTime = ExposureCalculator::calculateTestStripTime(
                 timer->getStatus()->getExposureTime(),
                 timer->getStatus()->getGranularity(),
                 timer->getStatus()->getStep(),
-                false
+                timer->getStatus()->isIterativeMode()
             );
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds", timer->getStatus()->getStep(), exposureTime);
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds, iter: %d", timer->getStatus()->getStep(), exposureTime, timer->getStatus()->isIterativeMode());
             timer->getRelay()->on();
             vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
             timer->getRelay()->off();
             timer->getStatus()->setMode(State::TEST_STRIP_SEQUENCE);
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step completed");
+
+            if (timer->getStatus()->getStep() < MAX_STEP)
+            {
+                timer->getStatus()->setStep(timer->getStatus()->getStep() + 1); // Advance to the next step for the next exposure
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step %d completed, preparing for next step", timer->getStatus()->getStep());
+                vTaskDelay(pdMS_TO_TICKS(WAIT_BETWEEN_TEST_STRIP_STEPS_MS));
+            } else {
+                timer->getStatus()->setMode(State::TEST_STRIP_CONFIG); // After the last step, return to config mode
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure sequence completed");
+            }
         } else if (currentState == State::FOCUS_LIGHT_ON) {
             // Focus light is on, relay should be on
             timer->getRelay()->on();

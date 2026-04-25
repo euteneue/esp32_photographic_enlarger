@@ -8,13 +8,14 @@ ExposureTimer* ExposureTimer::instance_ = nullptr;
 ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay, 
                                          AiEsp32RotaryEncoder* encoderValue, 
                                          AiEsp32RotaryEncoder* encoderMode, 
-                                         TM1638Interface* display, 
+                                         TM1638Interface* display,
+                                         Beeper* beeper, 
                                          QueueHandle_t inputQueue, 
                                          QueueHandle_t displayQueue) {
     if (instance_ == nullptr) {
         // Create instance only if it doesn't exist and we have all required parameters
-        if (status && relay && encoderValue && encoderMode && display) {
-            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, inputQueue, displayQueue);
+        if (status && relay && encoderValue && encoderMode && display && beeper && inputQueue && displayQueue) {
+            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, beeper, inputQueue, displayQueue);
         } else {
             // If instance doesn't exist but parameters are null, this is an error
             // In a real implementation, you might want to handle this differently
@@ -25,8 +26,8 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
 }
 
 
-ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, QueueHandle_t inputQueue, QueueHandle_t displayQueue)
-    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), inputQueue_(inputQueue), displayQueue_(displayQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
+ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, QueueHandle_t inputQueue, QueueHandle_t displayQueue)
+    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), inputQueue_(inputQueue), displayQueue_(displayQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
 {
 
 }
@@ -51,14 +52,18 @@ void ExposureTimer::setup()
     encoderMode_->begin();
     encoderValue_->begin();
 
+    // Set up interrupt service routines for encoders to handle rotation events
     encoderMode_->setup(readEncoderModeISR);
     encoderValue_->setup(readEncoderValueISR);
 
-    //set boundaries and if values should cycle or not
-    //in this example we will set possible values between 0 and 1000;
-    
-    encoderMode_->setBoundaries(0, 4, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
-    encoderValue_->setBoundaries(0, 999, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
+    // Set boundaries and acceleration for encoders based on the defined constants in config.h   
+    // With the "mode" encoder we face the challenge that we need to be able to switch between
+    // setting granularity and step, which have different boundaries. For simplicity, we will set 
+    // the mode encoder to have a range that covers all possible values for both step and 
+    // granularity, and then handle the interpretation of those values in the state manager 
+    // based on the current mode.
+    encoderMode_->setBoundaries(0, NUM_STEPS*NUM_GRANULARITY_LEVELS, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
+    encoderValue_->setBoundaries(MIN_EXPOSURE_TIME, MAX_EXPOSURE_TIME, true); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
 
     encoderMode_->setAcceleration(0); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
     encoderValue_->setAcceleration(250); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
@@ -100,6 +105,11 @@ AiEsp32RotaryEncoder* ExposureTimer::getEncoderMode() const
 TM1638Interface* ExposureTimer::getDisplay() const
 {
     return display_;
+}
+
+Beeper* ExposureTimer::getBeeper() const
+{
+    return beeper_;
 }
 
 ExposureStatus* ExposureTimer::getStatus() const
@@ -166,6 +176,9 @@ void ExposureTimer::refreshDisplay()
 void ExposureTimer::displayMode() 
 {
     // Display the current mode (TestStrip, Exposure or FocusLight) on the display
+    // This method takes over the compositioning of the display buffer for mode display, 
+    // and sends a message to the display manager to update the TM1638 display with the 
+    // new buffer. The display buffer is prepared based on the current mode.
     
     switch (status_->getMode()) {
         case State::INITIAL:
@@ -256,9 +269,18 @@ void ExposureTimer::displayStep()
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
 }
 
+void ExposureTimer::displayMessage(const char *message)
+{
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "%s", message);
+        
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);    
+}
 
 /**
- * @brief Process input events and update the exposure timer state accordingly
+ * @brief Process input events and update the exposure timer state accordingly. This method implements
+ * the state machine logic for handling user inputs based on the current mode of operation. It takes an event 
+ * type and an optional payload (for example, encoder values) and updates the ExposureStatus and display buffer 
+ * as needed, then sends a message to the display manager to refresh the TM1638 display with the new information.
  * 
  * @param event The input event to process
  * @param payload Optional pointer to additional data (for example encoder value) associated with the event
@@ -298,17 +320,26 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
                 display_->clear();
                 displayTimeandGranularity();
-                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted base time to %.1f", status_->getExposureTime());
-                Logger.log(MYLOG, ELOG_LEVEL_INFO, "new display buffer: %s", getDisplayBuffer());
             } else if (event == MsgType::ENCODER_MODE_CHANGE) {
-                status_->setGranularity(static_cast<Granularity>(*(long *) payload));
+                long modeValue = *(long *) payload;
+
+                modeValue = modeValue % NUM_GRANULARITY_LEVELS; // Wrap around to stay within 0-4
+                status_->setGranularity(static_cast<Granularity>(modeValue));
                 display_->clear();
                 displayTimeandGranularity();
-                Logger.log(MYLOG, ELOG_LEVEL_INFO, "adjusted granularity to %d", static_cast<int>(status_->getGranularity()));
+            } else if (event == MsgType::ITERATIVE_BUTTON_PRESS) {
+                status_->toggleIterativeMode();
+                display_->clear();
+
+                status_->isIterativeMode() ? displayMessage("ITER ON ") : displayMessage("ITER OFF"); 
             }
             break;
         case State::TEST_STRIP_SEQUENCE:
-            // Events handled externally for sequence advancement
+            // Events handled externally for sequence advancement, except for cancel button which can be used to exit the sequence
+             if (event == MsgType::CANCEL_BUTTON_PRESS) {
+                status_->setMode(State::TEST_STRIP_CONFIG);
+                displayMode();
+            }
             break;
         case State::FSTOP_EXPOSURE_CONFIG:
             if (event == MsgType::BUTTON_MODE_PRESS) {
@@ -316,10 +347,25 @@ void ExposureTimer::processInput(MsgType event, void *payload)
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
                 displayMode();
+            } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
+                status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
+                display_->clear();
+                displayTimeandStep();
+            } else if (event == MsgType::ENCODER_MODE_CHANGE) {
+                long modeValue = *(long *) payload;
+                int stepValue = (modeValue % NUM_STEPS) + MIN_STEP; // Wrap around to stay within -3 to +3
+
+                status_->setStep(stepValue);
+                display_->clear();
+                displayTimeandStep();
             }
             break;
         case State::FSTOP_EXPOSURE:
             // Automatic transition back handled externally
+             if (event == MsgType::CANCEL_BUTTON_PRESS) {
+                status_->setMode(State::FSTOP_EXPOSURE_CONFIG);
+                displayMode();
+            }            
             break;
         
         case State::TIME_EXPOSURE_CONFIG:
@@ -332,6 +378,10 @@ void ExposureTimer::processInput(MsgType event, void *payload)
             break;
         case State::TIME_EXPOSURE:
             // Automatic transition back handled externally
+             if (event == MsgType::CANCEL_BUTTON_PRESS) {
+                status_->setMode(State::TIME_EXPOSURE_CONFIG);
+                displayMode();
+            }            
             break;  
     }
 }

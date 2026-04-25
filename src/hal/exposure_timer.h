@@ -6,6 +6,7 @@
 #include "tm1638_interface.h"
 #include <Arduino.h>
 #include <AiEsp32RotaryEncoder.h>
+#include "beeper.h"
 #include "config.h"
 
 /**
@@ -24,6 +25,7 @@ public:
      * @param encoderValue Pointer to the rotary encoder instance for value adjustment
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
+     * @param beeper Beeper instance for audio feedback
      * @param inputQueue Queue handle for simulating input events from state manager
      * @param displayQueue Queue handle for sending display update messages to display manager
      * @return Reference to the singleton ExposureTimer instance
@@ -32,6 +34,7 @@ public:
                                      AiEsp32RotaryEncoder* encoderValue = nullptr, 
                                      AiEsp32RotaryEncoder* encoderMode = nullptr, 
                                      TM1638Interface* display = nullptr,
+                                     Beeper* beeper = nullptr, 
                                      QueueHandle_t inputQueue = nullptr, 
                                      QueueHandle_t displayQueue = nullptr);
 
@@ -107,6 +110,12 @@ public:
     TM1638Interface* getDisplay() const;
 
     /**
+     * @brief Get the Beeper instance for audio feedback
+     * @return Beeper object
+     */
+    Beeper* getBeeper() const;
+
+    /**
      * @brief Get pointer to the exposure status instance
      * @return Pointer to the ExposureStatus object
      */
@@ -135,10 +144,11 @@ private:
      * @param encoderValue Pointer to the rotary encoder instance for value adjustment
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
+     * @param beeper Beeper instance for audio feedback
      * @param inputQueue Queue handle for simulating input events from state manager
      * @param displayQueue Queue handle for sending display update messages to display manager
      */
-    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, QueueHandle_t inputQueue, QueueHandle_t displayQueue);
+    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, QueueHandle_t inputQueue, QueueHandle_t displayQueue);
 
     void displayMode();
 
@@ -150,6 +160,8 @@ private:
 
     void displayStep();
 
+    void displayMessage(const char* message);
+
     static ExposureTimer* instance_; /**< Static singleton instance pointer */
 
     ExposureStatus* status_;                    /**< Pointer to exposure status */
@@ -157,6 +169,7 @@ private:
     AiEsp32RotaryEncoder* encoderValue_;        /**< Pointer to value adjustment encoder */
     AiEsp32RotaryEncoder* encoderMode_;         /**< Pointer to mode adjustment encoder */
     TM1638Interface* display_;                  /**< Pointer to display interface */
+    Beeper* beeper_;                                /**< Beeper instance for audio feedback */   
     bool exposing_;                             /**< Flag indicating if exposure is active */
     float remainingTimeMs_;                     /**< Remaining exposure time in milliseconds */
     unsigned long lastTickMs_;                  /**< Timestamp of last tick for timing calculations */

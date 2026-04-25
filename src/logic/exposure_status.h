@@ -18,6 +18,7 @@ private:
     int step;             /**< Current step adjustment (-3 to +3) */
     State mode;            /**< Current operating mode */
     Granularity granularity; /**< Current adjustment granularity */
+    bool iterativeMode; /**< Whether test strip sequence is in iterative mode (true) or single step mode (false) */
 
 public:
     /**
@@ -26,8 +27,9 @@ public:
      * @param step Initial step adjustment
      * @param mode Initial operating mode
      * @param granularity Initial adjustment granularity
+     * @param iterativeMode Initial test strip sequence mode (iterative or single step)
      */
-    ExposureStatus(double exposureTime, int step, State mode, Granularity granularity);
+    ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode);
 
     /**
      * @brief Construct a new ExposureStatus object with default values
@@ -59,6 +61,14 @@ public:
     Granularity getGranularity() const;
 
     /**
+     * @brief Get whether the test strip sequence is in iterative mode (true) or single step mode (false)
+     * 
+     * @return true When the iterative mode is active, meaning that each step in the test strip sequence will be an increment from the previous step, rather than being calculated from the base time. In iterative mode, the exposure time for each step is calculated based on the previous step's time, allowing for a more gradual progression through the steps.
+     * @return false When the single step mode is active, meaning that each step in the test strip sequence is calculated independently from the base time, using the same base time for all steps. In single step mode, the exposure time for each step is calculated directly from the base time and the step adjustment, without reference to the previous step's time.
+     */
+    bool isIterativeMode() const; 
+
+    /**
      * @brief Toggle between TestStrip and Exposure modes
      */
     //void toggleMode();
@@ -86,6 +96,12 @@ public:
      * @param granularity New granularity setting
      */
     void setGranularity(Granularity granularity);
+
+    /**
+     * @brief Toggle between iterative and single step mode for test strip sequence
+     * 
+     */
+    void toggleIterativeMode();
 };
 
 #endif // EXPOSURE_STATUS_H

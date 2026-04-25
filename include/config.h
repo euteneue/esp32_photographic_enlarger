@@ -18,21 +18,32 @@
 #define ENCODER2_VCC -1
 #define ENCODER2_STEPS 4
 
+#define BEEPER_PIN 25 // GPIO pin for the beeper
+
 // Constants
 #define BASE_TIME_DEFAULT 10.0f
 #define BASE_FSTOP_DEFAULT 0
 
 #define MODE_BUTTON 0x01 // Bitmask for mode button on TM1638
+#define CANCEL_BUTTON 0x02 // Bitmask for cancel button on TM1638
+#define ITERATIVE_BUTTON 0x04 // Bitmask for button toggling between iterative and single step exposure mode for test strip sequence 
 
 #define MYLOG 0
 
 #define MIN_STEP -3  /**< Minimum step value */
 #define MAX_STEP 3   /**< Maximum step value */
+#define NUM_STEPS (MAX_STEP - MIN_STEP + 1) /**< Total number of steps */
+
+#define MIN_GRANULARITY 0 /**< Minimum granularity value (for example, 0 could represent 1 stop) */
+#define MAX_GRANULARITY 4 /**< Maximum granularity value (for example, 4 could represent 1/12 stop) */
+#define NUM_GRANULARITY_LEVELS (MAX_GRANULARITY - MIN_GRANULARITY + 1) /**< Total number of granularity levels */
 
 #define MIN_EXPOSURE_TIME 0     /**< Minimum exposure time in seconds */
 #define MAX_EXPOSURE_TIME 999   /**< Maximum exposure time in seconds */
 
 #define MAX_DISPLAY_STR_LEN 10 // 8 characters + eventual decimal points + null terminator
+
+#define WAIT_BETWEEN_TEST_STRIP_STEPS_MS 2000 // Time to wait between test strip steps in milliseconds
 
 
 
@@ -45,6 +56,8 @@
 enum MsgType {
     MODE_CHANGED,       /**< Message to update the display after the mode has changed to a new one */
     MODE_BUTTON_PRESS,   /**< Mode button pressed on TM1638 */
+    CANCEL_BUTTON_PRESS, /**< Cancel button pressed on TM1638 */
+    ITERATIVE_BUTTON_PRESS, /**< Iterative button pressed on TM1638 */
     FOOT_SWITCH_PRESS,    /**< Foot switch pressed (if applicable) */
     BUTTON_VALUE_PRESS,   /**< Value encoder button pressed */
     BUTTON_MODE_PRESS,    /**< Mode encoder button pressed */

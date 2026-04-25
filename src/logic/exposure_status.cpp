@@ -3,14 +3,14 @@
 
 
 // Constructors
-ExposureStatus::ExposureStatus(double exposureTime, int step, State mode, Granularity granularity) 
-    : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity) 
+ExposureStatus::ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode) 
+    : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity), iterativeMode(iterativeMode) 
     {
 
     }
     
     
-ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs) 
+ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs), iterativeMode(true) 
     {
 
     }
@@ -35,7 +35,12 @@ State ExposureStatus::getMode() const
 
 Granularity ExposureStatus::getGranularity() const {
     return granularity;
-}   
+}
+
+bool ExposureStatus::isIterativeMode() const
+{
+    return iterativeMode;
+}
 
 // Setters
 
@@ -67,5 +72,16 @@ void ExposureStatus::setGranularity(Granularity granularity)
     if (this->mode == State::TEST_STRIP_CONFIG) 
     {
         this->granularity = granularity;
+    }
+}
+
+
+void ExposureStatus::toggleIterativeMode()
+{
+    // Only allow toggling iterative mode if the mode is TestStrip -> once in Exposure mode, the iterative/single step mode is 
+    // fixed to what it was when the mode was switched from TestStrip to Exposure
+    if (this->mode == State::TEST_STRIP_CONFIG) 
+    {
+        this->iterativeMode = !this->iterativeMode;
     }
 }
