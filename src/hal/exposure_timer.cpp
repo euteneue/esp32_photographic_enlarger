@@ -69,7 +69,11 @@ void ExposureTimer::setup()
     encoderValue_->setAcceleration(250); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
 
     display_->setBrightness(0);
+    display_->setLEDState(0); // Start with all LEDs off
+    display_->setLEDs();
     displayMode();
+
+    beeper_->doubleBeep();
 }
 
 
@@ -246,7 +250,7 @@ void ExposureTimer::displayTimeandGranularity()
 
 void ExposureTimer::displayTimeandStep() 
 {
-    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, " %4.1f %+2d", status_->getExposureTime(), status_->getStep());
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, " %4.1f  %+2d", status_->getExposureTime(), status_->getStep());
     
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
 }
@@ -258,6 +262,15 @@ void ExposureTimer::displayTime()
     snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "time: %4.1f ", status_->getExposureTime());
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
+}
+
+void ExposureTimer::displayExposingTime(unsigned long timeMs)
+{
+    double timeSec = timeMs / 1000.0f;
+
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "%4.1f     ", timeSec);
+
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);    
 }
 
 void ExposureTimer::displayStep() 

@@ -43,7 +43,19 @@ public:
      * @brief Set the state of the LEDs
      * @param leds LED bitmask (8 bits for 8 LEDs)
      */
-    void setLEDs(uint8_t leds);
+    void setLEDs();
+
+    /**
+     * @brief Set the state of the LEDs, without affecting the display. Call setLEDs to update the display with the new LED state after calling this method.
+     * @param leds LED bitmask (8 bits for 8 LEDs)
+     */
+    void setLEDState(uint8_t leds);
+
+    /**
+     * @brief Get the current state of the LEDs
+     * @return LED bitmask (8 bits for 8 LEDs)
+     */
+    uint8_t getLEDState() const;
 
     /**
      * @brief Read the state of the buttons
@@ -51,29 +63,7 @@ public:
      */
     uint8_t getButtons();
 
-    /**
-     * @brief Display both time and step information
-     * @param status ExposureStatus containing time and step data
-     */
-    //void displayTimeandStep(ExposureStatus status);
 
-    /**
-     * @brief Display only the exposure time
-     * @param status ExposureStatus containing time data
-     */
-    //void displayTime(ExposureStatus status);
-
-    /**
-     * @brief Display only the step information
-     * @param status ExposureStatus containing step data
-     */
-    //void displayStep(ExposureStatus status);
-
-    /**
-     * @brief Display the current mode (TestStrip, Exposure or FocusLight)
-     * @param status ExposureStatus containing mode data
-     */
-    //void displayMode(ExposureStatus status);
 
 private:
     TM1638plus tm1638_; /**< TM1638plus instance for hardware control */
@@ -82,6 +72,8 @@ private:
     uint8_t currentButtonsState_; /**< Current state of the buttons */
     unsigned long lastButtonReadTime_; /**< Timestamp of the last button read, used for debouncing */
     SemaphoreHandle_t tm1638Mutex_; /**< Mutex to protect access to TM1638 display and buttons */
+
+    uint8_t ledState_; /**< Current state of the LEDs, stored as a bitmask */
 };
 
 #endif

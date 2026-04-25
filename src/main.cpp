@@ -38,6 +38,7 @@ float calculatedTime = BASE_TIME_DEFAULT;
 void inputHandler(void *pvParameters);
 void displayUpdate(void *pvParameters);
 void exposureTimer(void *pvParameters);
+void countdownExposureTime(double exposureTime);
 void stateManager(void *pvParameters);
 
 
@@ -242,6 +243,7 @@ void displayUpdate(void *pvParameters) {
     while (true) 
     {
         timer->getDisplay()->setDisplay(timer->getDisplayBuffer());
+        timer->getDisplay()->setLEDs();
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -261,7 +263,10 @@ void exposureTimer(void *pvParameters)
             );
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting F-Stop exposure for %.2f seconds", exposureTime);
             timer->getRelay()->on();
-            vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
+
+            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
+            countdownExposureTime(exposureTime);
+
             timer->getRelay()->off();
             timer->getStatus()->setMode(State::FSTOP_EXPOSURE_CONFIG);
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
@@ -270,7 +275,10 @@ void exposureTimer(void *pvParameters)
 
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Time-based exposure for %.2f seconds", exposureTime);
             timer->getRelay()->on();
-            vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
+
+            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
+            countdownExposureTime(exposureTime);
+
             timer->getRelay()->off();
             timer->getStatus()->setMode(State::TIME_EXPOSURE_CONFIG);
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Time-based exposure completed");
@@ -282,8 +290,13 @@ void exposureTimer(void *pvParameters)
                 timer->getStatus()->isIterativeMode()
             );
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds, iter: %d", timer->getStatus()->getStep(), exposureTime, timer->getStatus()->isIterativeMode());
+            timer->getDisplay()->setLEDState(1 << (timer->getStatus()->getStep()-MIN_STEP)); // Light up the LED corresponding to the current step
+            
             timer->getRelay()->on();
-            vTaskDelay(pdMS_TO_TICKS(exposureTime * 1000));
+            
+            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
+            countdownExposureTime(exposureTime);
+
             timer->getRelay()->off();
             timer->getStatus()->setMode(State::TEST_STRIP_SEQUENCE);
 
@@ -293,6 +306,7 @@ void exposureTimer(void *pvParameters)
                 Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step %d completed, preparing for next step", timer->getStatus()->getStep());
                 vTaskDelay(pdMS_TO_TICKS(WAIT_BETWEEN_TEST_STRIP_STEPS_MS));
             } else {
+                timer->getDisplay()->setLEDState(0); // Turn off all LEDs after the last step
                 timer->getStatus()->setMode(State::TEST_STRIP_CONFIG); // After the last step, return to config mode
                 Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure sequence completed");
             }
@@ -304,6 +318,24 @@ void exposureTimer(void *pvParameters)
             timer->getRelay()->off();
         }
         vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+void countdownExposureTime(double exposureTime)
+{
+    double elapsedTime = 0;
+    while (elapsedTime < (exposureTime * 1000))
+    {
+        // Check if we received a cancel message
+        if ((timer->getStatus()->getMode() != TIME_EXPOSURE) && (timer->getStatus()->getMode() != FSTOP_EXPOSURE) && (timer->getStatus()->getMode() != State::TEST_STRIP_SEQUENCE))
+        {
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure cancelled after %.2f seconds", elapsedTime / 1000.0f);
+            break;
+        }
+        if ((long) elapsedTime % 1000 == 0) timer->getBeeper()->tick();
+        timer->displayExposingTime((exposureTime * 1000) - elapsedTime);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        elapsedTime += 100;
     }
 }
 

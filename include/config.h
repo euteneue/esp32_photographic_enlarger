@@ -42,6 +42,8 @@
 #define MAX_EXPOSURE_TIME 999   /**< Maximum exposure time in seconds */
 
 #define MAX_DISPLAY_STR_LEN 10 // 8 characters + eventual decimal points + null terminator
+#define TM_MAX_LED 7 // Maximum LED index for TM1638 (0-7 for 8 LEDs)
+#define TM_LED_COUNT (TM_MAX_LED+1) // Number of LEDs on the TM1638 module
 
 #define WAIT_BETWEEN_TEST_STRIP_STEPS_MS 2000 // Time to wait between test strip steps in milliseconds
 

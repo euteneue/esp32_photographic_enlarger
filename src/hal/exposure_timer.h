@@ -136,6 +136,8 @@ public:
      */
     const char *getDisplayBuffer() const;
 
+    void displayExposingTime(unsigned long timeMs);    
+
 private:
     /**
      * @brief Construct a new ExposureTimer object
@@ -157,6 +159,8 @@ private:
     void displayTimeandStep();
 
     void displayTime();
+
+
 
     void displayStep();
 

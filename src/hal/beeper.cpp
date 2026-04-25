@@ -6,7 +6,7 @@
 #define LOW_FREQ 500
 
 // Duration definitions (in milliseconds)
-#define TICK_DURATION 100
+#define TICK_DURATION 10
 #define BEEP_DURATION 200
 #define PAUSE_DURATION 100
 
