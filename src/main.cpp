@@ -21,10 +21,12 @@ TaskHandle_t inputHandlerTask;
 TaskHandle_t displayUpdateTask;
 TaskHandle_t exposureTimerTask;
 TaskHandle_t stateManagerTask;
+TaskHandle_t beeperTask;
 
 // Queues for inter-task communication
 QueueHandle_t inputQueue;
 QueueHandle_t displayQueue;
+QueueHandle_t beeperQueue;
 
 SemaphoreHandle_t tm1638Mutex;
 
@@ -40,6 +42,7 @@ void displayUpdate(void *pvParameters);
 void exposureTimer(void *pvParameters);
 void countdownExposureTime(double exposureTime);
 void stateManager(void *pvParameters);
+void beeper(void *pvParameters);
 
 
 void testExposureCalculator() 
@@ -103,6 +106,7 @@ void setup()
     // Create queues
     inputQueue = xQueueCreate(10, sizeof(QueueItem));
     displayQueue = xQueueCreate(10, sizeof(QueueItem));
+    beeperQueue = xQueueCreate(10, sizeof(QueueItem));
 
     // Create mutex to serialize TM1638 display / button access. This is necessary because the display and 
     // button handling code in the TM1638 library is not thread safe, and we need to ensure that only one 
@@ -117,7 +121,8 @@ void setup()
                               new TM1638Interface(TM1638_DIO, TM1638_CLK, TM1638_STB, tm1638Mutex),
                               new Beeper(BEEPER_PIN),
                               inputQueue,
-                              displayQueue);
+                              displayQueue,
+                              beeperQueue);
 
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing rotary encoders...");                              
@@ -128,7 +133,7 @@ void setup()
     xTaskCreate(displayUpdate, "DisplayUpdate", 2048, NULL, 3, &displayUpdateTask);
     xTaskCreate(exposureTimer, "ExposureTimer", 2048, NULL, 1, &exposureTimerTask);
     xTaskCreate(stateManager, "StateManager", 2048, NULL, 1, &stateManagerTask);
-
+    xTaskCreate(beeper, "Beeper", 2048, NULL, 3, &beeperTask);
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "finished initialization...");
 
      //testExposureCalculator();
@@ -251,6 +256,7 @@ void displayUpdate(void *pvParameters) {
 
 void exposureTimer(void *pvParameters) 
 {
+
     while (true) 
     {
         State currentState = timer->getStatus()->getMode();
@@ -324,6 +330,8 @@ void exposureTimer(void *pvParameters)
 void countdownExposureTime(double exposureTime)
 {
     double elapsedTime = 0;
+    QueueItem msg;
+
     while (elapsedTime < (exposureTime * 1000))
     {
         // Check if we received a cancel message
@@ -332,11 +340,31 @@ void countdownExposureTime(double exposureTime)
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure cancelled after %.2f seconds", elapsedTime / 1000.0f);
             break;
         }
-        if ((long) elapsedTime % 1000 == 0) timer->getBeeper()->tick();
+
+        // Every second, send a tick message to the beeper to provide audio feedback during the 
+        // exposure. As beeping blocks the execution of the host task for a short time, we will
+        // use a non-blocking approach to trigger the beeper every second without blocking the 
+        // exposure timer task. This allows us to maintain accurate timing for the exposure while 
+        // still providing regular audio feedback.
+        if ((long) elapsedTime % 1000 == 0) 
+        {
+            msg.type = MsgType::BEEPER_TICK;
+            msg.payload = nullptr;
+
+            xQueueSend(beeperQueue, &msg, 0);
+        }
         timer->displayExposingTime((exposureTime * 1000) - elapsedTime);
         vTaskDelay(pdMS_TO_TICKS(100));
         elapsedTime += 100;
     }
+
+    // After the exposure is complete (either because the time has elapsed or because it was cancelled),
+    // we can trigger a double beep to signal the end of the exposure. This provides clear audio feedback
+    // to the user that the exposure has finished.
+    msg.type = MsgType::BEEPER_DOUBLE_BEEP;
+    msg.payload = nullptr;
+
+    xQueueSend(beeperQueue, &msg, 0);
 }
 
 void stateManager(void *pvParameters) 
@@ -352,5 +380,35 @@ void stateManager(void *pvParameters)
             timer->processInput(input->type, input->payload);
         }
         vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+void beeper(void *pvParameters)
+{
+    QueueItem *msg = new QueueItem;
+
+    while (true) 
+    {
+        if (xQueueReceive(beeperQueue, msg, portMAX_DELAY)) 
+        {
+            switch (msg->type) 
+            {
+                case MsgType::BEEPER_HIGH:
+                    timer->getBeeper()->highBeep();
+                    break;
+                case MsgType::BEEPER_TICK:
+                    timer->getBeeper()->tick();
+                    break;
+                case MsgType::BEEPER_LOW:
+                    timer->getBeeper()->lowBeep();
+                    break;
+                case MsgType::BEEPER_DOUBLE_BEEP:
+                    timer->getBeeper()->doubleBeep();
+                    break;
+                default:
+                    // For other message types, we can choose to do nothing or add more cases as needed
+                    break;
+            }
+        }
     }
 }

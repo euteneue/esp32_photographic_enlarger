@@ -65,6 +65,10 @@ enum MsgType {
     BUTTON_MODE_PRESS,    /**< Mode encoder button pressed */
     ENCODER_VALUE_CHANGE, /**< Value encoder rotation changed */
     ENCODER_MODE_CHANGE,   /**< Mode encoder rotation changed */
+    BEEPER_TICK,            /**< Beeper tick event for timing beeps */
+    BEEPER_HIGH,        /**< Beeper high sound event */
+    BEEPER_LOW,         /**< Beeper low sound event */
+    BEEPER_DOUBLE_BEEP,   /**< Beeper double beep event */
     TIME_ELAPSED,          /**< Exposure timer has elapsed */
     TIME_TICK            /**< Timer tick event for exposure timing */
 };

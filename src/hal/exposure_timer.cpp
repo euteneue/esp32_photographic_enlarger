@@ -11,11 +11,12 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
                                          TM1638Interface* display,
                                          Beeper* beeper, 
                                          QueueHandle_t inputQueue, 
-                                         QueueHandle_t displayQueue) {
+                                         QueueHandle_t displayQueue,
+                                         QueueHandle_t beeperQueue) {
     if (instance_ == nullptr) {
         // Create instance only if it doesn't exist and we have all required parameters
-        if (status && relay && encoderValue && encoderMode && display && beeper && inputQueue && displayQueue) {
-            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, beeper, inputQueue, displayQueue);
+        if (status && relay && encoderValue && encoderMode && display && beeper && inputQueue && displayQueue && beeperQueue) {
+            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, beeper, inputQueue, displayQueue, beeperQueue);
         } else {
             // If instance doesn't exist but parameters are null, this is an error
             // In a real implementation, you might want to handle this differently
@@ -26,8 +27,8 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
 }
 
 
-ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, QueueHandle_t inputQueue, QueueHandle_t displayQueue)
-    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), inputQueue_(inputQueue), displayQueue_(displayQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
+ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue)
+    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
 {
 
 }
