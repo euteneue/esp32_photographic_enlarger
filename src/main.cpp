@@ -152,82 +152,7 @@ void inputHandler(void *pvParameters) {
 
     while (true) 
     {
-        uint8_t tmButtons = timer->getDisplay()->getButtons();
-
-        if (tmButtons & MODE_BUTTON) // Mode button has been pressed
-        {
-            msg.type = MsgType::MODE_BUTTON_PRESS;
-            msg.payload = nullptr;
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode button");
-
-            xQueueSend(inputQueue, &msg, 0);
-        }
-
-        if (tmButtons & CANCEL_BUTTON) // Cancel button has been pressed
-        {
-            msg.type = MsgType::CANCEL_BUTTON_PRESS;
-            msg.payload = nullptr;
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the cancel button");
-
-            xQueueSend(inputQueue, &msg, 0);
-        }
-
-        if (tmButtons & ITERATIVE_BUTTON) // Iterative button has been pressed
-        {
-            msg.type = MsgType::ITERATIVE_BUTTON_PRESS;
-            msg.payload = nullptr;
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the iterative button");
-
-            xQueueSend(inputQueue, &msg, 0);
-        }        
-
-        // - user has turned the mode encoder
-        if (timer->getEncoderMode()->encoderChanged()) 
-        {
-            valueBuffer = timer->getEncoderMode()->readEncoder();
-
-            msg.type = MsgType::ENCODER_MODE_CHANGE;
-            msg.payload = &valueBuffer;
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", valueBuffer);
-
-            xQueueSend(inputQueue, &msg, 0);
-        }
-
-        // - user has turned the value encoder
-        if (timer->getEncoderValue()->encoderChanged()) 
-        {
-            valueBuffer = timer->getEncoderValue()->readEncoder();
-
-            msg.type = MsgType::ENCODER_VALUE_CHANGE;
-            msg.payload = &valueBuffer;
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", valueBuffer);
-
-            xQueueSend(inputQueue, &msg, 0);            
-        }
-
-        if (timer->getEncoderMode()->isEncoderButtonClicked()) 
-        {            
-            msg.type = MsgType::BUTTON_MODE_PRESS;
-            msg.payload = nullptr;
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode encoder button");
-
-            xQueueSend(inputQueue, &msg, 0);
-        }
-
-        if (timer->getEncoderValue()->isEncoderButtonClicked()) 
-        {
-            msg.type = MsgType::BUTTON_VALUE_PRESS;
-            msg.payload = nullptr;
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the value encoder button");
-
-            xQueueSend(inputQueue, &msg, 0);
-        }
+        timer->handleInput();
         
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -288,24 +213,8 @@ void beeper(void *pvParameters)
     {
         if (xQueueReceive(beeperQueue, msg, portMAX_DELAY)) 
         {
-            switch (msg->type) 
-            {
-                case MsgType::BEEPER_HIGH:
-                    timer->getBeeper()->highBeep();
-                    break;
-                case MsgType::BEEPER_TICK:
-                    timer->getBeeper()->tick();
-                    break;
-                case MsgType::BEEPER_LOW:
-                    timer->getBeeper()->lowBeep();
-                    break;
-                case MsgType::BEEPER_DOUBLE_BEEP:
-                    timer->getBeeper()->doubleBeep();
-                    break;
-                default:
-                    // For other message types, we can choose to do nothing or add more cases as needed
-                    break;
-            }
+
+            timer->handleBeeper(msg);            
         }
     }
 }

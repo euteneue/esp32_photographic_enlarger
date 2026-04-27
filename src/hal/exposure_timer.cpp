@@ -419,11 +419,12 @@ void ExposureTimer::countdownExposureTime(double exposureTime)
         // use a non-blocking approach to trigger the beeper every second without blocking the 
         // exposure timer task. This allows us to maintain accurate timing for the exposure while 
         // still providing regular audio feedback.
-        if ((long) ((exposureTime*1000) - elapsedTime) % 1000 < 50) 
+        if ((long) ((exposureTime*1000) - elapsedTime) % 1000 < 90) 
         {
             msg.type = MsgType::BEEPER_TICK;
             msg.payload = nullptr;
 
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure tick at %.2f seconds remaining", (exposureTime*1000 - elapsedTime) / 1000.0f);
             xQueueSend(beeperQueue_, &msg, 0);
         }
         displayExposingTime((exposureTime * 1000) - elapsedTime);
@@ -510,6 +511,108 @@ void ExposureTimer::exposureControl()
             // For other states, ensure relay is off
             getRelay()->off();
         }    
+}
+
+void ExposureTimer::handleInput()
+{
+      uint8_t tmButtons = getDisplay()->getButtons();
+
+        if (tmButtons & MODE_BUTTON) // Mode button has been pressed
+        {
+            msg_.type = MsgType::MODE_BUTTON_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode button");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }
+
+        if (tmButtons & CANCEL_BUTTON) // Cancel button has been pressed
+        {
+            msg_.type = MsgType::CANCEL_BUTTON_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the cancel button");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }
+
+        if (tmButtons & ITERATIVE_BUTTON) // Iterative button has been pressed
+        {
+            msg_.type = MsgType::ITERATIVE_BUTTON_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the iterative button");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }        
+
+        // - user has turned the mode encoder
+        if (getEncoderMode()->encoderChanged()) 
+        {
+            valueBuffer_ = getEncoderMode()->readEncoder();
+
+            msg_.type = MsgType::ENCODER_MODE_CHANGE;
+            msg_.payload = &valueBuffer_;
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", valueBuffer_);
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }
+
+        // - user has turned the value encoder
+        if (getEncoderValue()->encoderChanged()) 
+        {
+            valueBuffer_ = getEncoderValue()->readEncoder();
+
+            msg_.type = MsgType::ENCODER_VALUE_CHANGE;
+            msg_.payload = &valueBuffer_;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", valueBuffer_);
+
+            xQueueSend(inputQueue_, &msg_, 0);            
+        }
+
+        if (getEncoderMode()->isEncoderButtonClicked()) 
+        {            
+            msg_.type = MsgType::BUTTON_MODE_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the mode encoder button");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }
+
+        if (getEncoderValue()->isEncoderButtonClicked()) 
+        {
+            msg_.type = MsgType::BUTTON_VALUE_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the value encoder button");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }    
+}
+
+void ExposureTimer::handleBeeper(QueueItem *msg)
+{
+    switch (msg->type) 
+    {
+        case MsgType::BEEPER_HIGH:
+            getBeeper()->highBeep();
+            break;
+        case MsgType::BEEPER_TICK:
+            getBeeper()->tick();
+            break;
+        case MsgType::BEEPER_LOW:
+            getBeeper()->lowBeep();
+            break;
+        case MsgType::BEEPER_DOUBLE_BEEP:
+            getBeeper()->doubleBeep();
+            break;
+        default:
+            // For other message types, we can choose to do nothing or add more cases as needed
+            break;
+    }    
 }
 
 const char *ExposureTimer::getDisplayBuffer() const

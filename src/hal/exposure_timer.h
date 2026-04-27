@@ -139,6 +139,22 @@ public:
     void exposureControl();
 
     /**
+     * @brief Handle user input from the TM1638 buttons and rotary encoders. This method checks the state 
+     * of the buttons and encoders, and sends appropriate messages to the state manager to update the 
+     * system state based on user interactions. 
+     * 
+     */
+    void handleInput();
+
+    /**
+     * @brief Handle the event queue for the beeper manager. This method checks for messages related to beeper 
+     * events (for example, tick, high beep, low beep, double beep) and calls the corresponding methods on the 
+     * Beeper instance to produce the appropriate sounds.
+     * 
+     */
+    void handleBeeper(QueueItem *msg);
+
+    /**
      * @brief Get the Display Buffer object for formatting display strings
      * 
      * @return char* Pointer to the display buffer
@@ -188,6 +204,7 @@ private:
     float remainingTimeMs_;                     /**< Remaining exposure time in milliseconds */
     unsigned long lastTickMs_;                  /**< Timestamp of last tick for timing calculations */
     QueueItem msg_;                              /**< Queue item for sending messages from state manager, e.g. to the DisplayManager or the ExposureTimer */
+    long valueBuffer_;                            /**< Buffer for encoder value to be sent in queue messages */
     // Queues for inter-task communication
     QueueHandle_t inputQueue_;                  /**< Queue for simulating input events from state manager */
     QueueHandle_t displayQueue_;                /**< Queue for sending display update messages to display manager */   
