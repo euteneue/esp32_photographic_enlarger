@@ -136,6 +136,8 @@ void setup()
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "finished initialization...");
 
      //testExposureCalculator();
+    timer->getDisplay()->setLEDState(2^7);
+    timer->getDisplay()->setLEDs(); 
 }
 
 void loop() {

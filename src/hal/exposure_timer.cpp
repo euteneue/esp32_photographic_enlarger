@@ -260,7 +260,7 @@ void ExposureTimer::displayTime()
 {
     // Display the exposure time on the first 4 digits, and blank the last 4 digits
 
-    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "time: %4.1f ", status_->getExposureTime());
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "%4.1f     ", status_->getExposureTime());
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
 }
@@ -353,7 +353,7 @@ void ExposureTimer::processInput(MsgType event, void *payload)
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
                 status_->setMode(State::TEST_STRIP_CONFIG);
                 displayMode();
-            }
+            } 
             break;
         case State::FSTOP_EXPOSURE_CONFIG:
             if (event == MsgType::BUTTON_MODE_PRESS) {
@@ -388,6 +388,10 @@ void ExposureTimer::processInput(MsgType event, void *payload)
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
                 displayMode();
+            } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
+                status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
+                display_->clear();
+                displayTime();
             }
             break;
         case State::TIME_EXPOSURE:
