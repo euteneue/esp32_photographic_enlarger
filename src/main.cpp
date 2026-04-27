@@ -35,12 +35,13 @@ float baseTime = BASE_TIME_DEFAULT;
 int baseFStop = BASE_FSTOP_DEFAULT;
 int currentFStop = BASE_FSTOP_DEFAULT;
 float calculatedTime = BASE_TIME_DEFAULT;
+long valueBuffer = 0;
 
 // Function prototypes
 void inputHandler(void *pvParameters);
 void displayUpdate(void *pvParameters);
 void exposureTimer(void *pvParameters);
-void countdownExposureTime(double exposureTime);
+//void countdownExposureTime(double exposureTime);
 void stateManager(void *pvParameters);
 void beeper(void *pvParameters);
 
@@ -95,8 +96,6 @@ void testExposureCalculator()
 
 void setup() 
 {
-    QueueItem *msg = new QueueItem();
-
     Serial.begin(115200);
     Logger.registerSerial(MYLOG, ELOG_LEVEL_DEBUG, "DarkroomTimer", Serial);
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Darkroom Timer...");
@@ -188,11 +187,11 @@ void inputHandler(void *pvParameters) {
         // - user has turned the mode encoder
         if (timer->getEncoderMode()->encoderChanged()) 
         {
-            int value = timer->getEncoderMode()->readEncoder();
+            valueBuffer = timer->getEncoderMode()->readEncoder();
 
             msg.type = MsgType::ENCODER_MODE_CHANGE;
-            msg.payload = &value;
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", value);
+            msg.payload = &valueBuffer;
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", valueBuffer);
 
             xQueueSend(inputQueue, &msg, 0);
         }
@@ -200,12 +199,12 @@ void inputHandler(void *pvParameters) {
         // - user has turned the value encoder
         if (timer->getEncoderValue()->encoderChanged()) 
         {
-            int value = timer->getEncoderValue()->readEncoder();
+            valueBuffer = timer->getEncoderValue()->readEncoder();
 
             msg.type = MsgType::ENCODER_VALUE_CHANGE;
-            msg.payload = &value;
+            msg.payload = &valueBuffer;
 
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", value);
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has turned the value encoder, new value: %d", valueBuffer);
 
             xQueueSend(inputQueue, &msg, 0);            
         }
@@ -259,112 +258,10 @@ void exposureTimer(void *pvParameters)
 
     while (true) 
     {
-        State currentState = timer->getStatus()->getMode();
+        timer->exposureControl();
 
-        if (currentState == FSTOP_EXPOSURE) {
-            double exposureTime = ExposureCalculator::calculateExposureTime(
-                timer->getStatus()->getExposureTime(),
-                timer->getStatus()->getGranularity(),
-                timer->getStatus()->getStep()
-            );
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting F-Stop exposure for %.2f seconds", exposureTime);
-            timer->getRelay()->on();
-
-            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
-            countdownExposureTime(exposureTime);
-
-            timer->getRelay()->off();
-            timer->getStatus()->setMode(State::FSTOP_EXPOSURE_CONFIG);
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
-        } else if (currentState == TIME_EXPOSURE) {
-            double exposureTime = timer->getStatus()->getExposureTime();
-
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Time-based exposure for %.2f seconds", exposureTime);
-            timer->getRelay()->on();
-
-            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
-            countdownExposureTime(exposureTime);
-
-            timer->getRelay()->off();
-            timer->getStatus()->setMode(State::TIME_EXPOSURE_CONFIG);
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Time-based exposure completed");
-        } else if (currentState == State::TEST_STRIP_SEQUENCE) {
-            double exposureTime = ExposureCalculator::calculateTestStripTime(
-                timer->getStatus()->getExposureTime(),
-                timer->getStatus()->getGranularity(),
-                timer->getStatus()->getStep(),
-                timer->getStatus()->isIterativeMode()
-            );
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds, iter: %d", timer->getStatus()->getStep(), exposureTime, timer->getStatus()->isIterativeMode());
-            timer->getDisplay()->setLEDState(1 << (timer->getStatus()->getStep()-MIN_STEP)); // Light up the LED corresponding to the current step
-            
-            timer->getRelay()->on();
-            
-            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
-            countdownExposureTime(exposureTime);
-
-            timer->getRelay()->off();
-            timer->getStatus()->setMode(State::TEST_STRIP_SEQUENCE);
-
-            if (timer->getStatus()->getStep() < MAX_STEP)
-            {
-                timer->getStatus()->setStep(timer->getStatus()->getStep() + 1); // Advance to the next step for the next exposure
-                Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step %d completed, preparing for next step", timer->getStatus()->getStep());
-                vTaskDelay(pdMS_TO_TICKS(WAIT_BETWEEN_TEST_STRIP_STEPS_MS));
-            } else {
-                timer->getDisplay()->setLEDState(0); // Turn off all LEDs after the last step
-                timer->getStatus()->setMode(State::TEST_STRIP_CONFIG); // After the last step, return to config mode
-                Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure sequence completed");
-            }
-        } else if (currentState == State::FOCUS_LIGHT_ON) {
-            // Focus light is on, relay should be on
-            timer->getRelay()->on();
-        } else {
-            // For other states, ensure relay is off
-            timer->getRelay()->off();
-        }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-}
-
-void countdownExposureTime(double exposureTime)
-{
-    double elapsedTime = 0;
-    QueueItem msg;
-
-    while (elapsedTime < (exposureTime * 1000))
-    {
-        // Check if we received a cancel message
-        if ((timer->getStatus()->getMode() != TIME_EXPOSURE) && (timer->getStatus()->getMode() != FSTOP_EXPOSURE) && (timer->getStatus()->getMode() != State::TEST_STRIP_SEQUENCE))
-        {
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure cancelled after %.2f seconds", elapsedTime / 1000.0f);
-            break;
-        }
-
-        // Every second, send a tick message to the beeper to provide audio feedback during the 
-        // exposure. As beeping blocks the execution of the host task for a short time, we will
-        // use a non-blocking approach to trigger the beeper every second without blocking the 
-        // exposure timer task. This allows us to maintain accurate timing for the exposure while 
-        // still providing regular audio feedback.
-        if ((long) elapsedTime % 1000 == 0) 
-        {
-            msg.type = MsgType::BEEPER_TICK;
-            msg.payload = nullptr;
-
-            xQueueSend(beeperQueue, &msg, 0);
-        }
-        timer->displayExposingTime((exposureTime * 1000) - elapsedTime);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        elapsedTime += 100;
-    }
-
-    // After the exposure is complete (either because the time has elapsed or because it was cancelled),
-    // we can trigger a double beep to signal the end of the exposure. This provides clear audio feedback
-    // to the user that the exposure has finished.
-    msg.type = MsgType::BEEPER_DOUBLE_BEEP;
-    msg.payload = nullptr;
-
-    xQueueSend(beeperQueue, &msg, 0);
 }
 
 void stateManager(void *pvParameters) 

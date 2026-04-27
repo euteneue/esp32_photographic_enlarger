@@ -400,6 +400,118 @@ void ExposureTimer::processInput(MsgType event, void *payload)
     }
 }
 
+void ExposureTimer::countdownExposureTime(double exposureTime)
+{
+    double elapsedTime = 0;
+    QueueItem msg;
+
+    while (elapsedTime < (exposureTime * 1000))
+    {
+        // Check if we received a cancel message
+        if ((getStatus()->getMode() != TIME_EXPOSURE) && (getStatus()->getMode() != FSTOP_EXPOSURE) && (getStatus()->getMode() != State::TEST_STRIP_SEQUENCE))
+        {
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure cancelled after %.2f seconds", elapsedTime / 1000.0f);
+            break;
+        }
+
+        // Every second, send a tick message to the beeper to provide audio feedback during the 
+        // exposure. As beeping blocks the execution of the host task for a short time, we will
+        // use a non-blocking approach to trigger the beeper every second without blocking the 
+        // exposure timer task. This allows us to maintain accurate timing for the exposure while 
+        // still providing regular audio feedback.
+        if ((long) ((exposureTime*1000) - elapsedTime) % 1000 < 50) 
+        {
+            msg.type = MsgType::BEEPER_TICK;
+            msg.payload = nullptr;
+
+            xQueueSend(beeperQueue_, &msg, 0);
+        }
+        displayExposingTime((exposureTime * 1000) - elapsedTime);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        elapsedTime += 100;
+    }
+
+    // After the exposure is complete (either because the time has elapsed or because it was cancelled),
+    // we can trigger a double beep to signal the end of the exposure. This provides clear audio feedback
+    // to the user that the exposure has finished.
+    msg.type = MsgType::BEEPER_DOUBLE_BEEP;
+    msg.payload = nullptr;
+
+    xQueueSend(beeperQueue_, &msg, 0);
+}
+
+void ExposureTimer::exposureControl()
+{
+        State currentState = getStatus()->getMode();
+
+        if (currentState == FSTOP_EXPOSURE) {
+            double exposureTime = ExposureCalculator::calculateExposureTime(
+                getStatus()->getExposureTime(),
+                getStatus()->getGranularity(),
+                getStatus()->getStep()
+            );
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting F-Stop exposure for %.2f seconds", exposureTime);
+            getRelay()->on();
+
+            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
+            countdownExposureTime(exposureTime);
+
+            getRelay()->off();
+            getStatus()->setMode(State::FSTOP_EXPOSURE_CONFIG);
+            displayTimeandStep();
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
+        } else if (currentState == TIME_EXPOSURE) {
+            double exposureTime = getStatus()->getExposureTime();
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Time-based exposure for %.2f seconds", exposureTime);
+            getRelay()->on();
+
+            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
+            countdownExposureTime(exposureTime);
+
+            getRelay()->off();
+            getStatus()->setMode(State::TIME_EXPOSURE_CONFIG);     
+            displayTime();       
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Time-based exposure completed");
+        } else if (currentState == State::TEST_STRIP_SEQUENCE) {
+            double exposureTime = ExposureCalculator::calculateTestStripTime(
+                getStatus()->getExposureTime(),
+                getStatus()->getGranularity(),
+                getStatus()->getStep(),
+                getStatus()->isIterativeMode()
+            );
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds, iter: %d", getStatus()->getStep(), exposureTime, getStatus()->isIterativeMode());
+            getDisplay()->setLEDState(1 << (getStatus()->getStep()-MIN_STEP)); // Light up the LED corresponding to the current step
+            
+            getRelay()->on();
+            
+            // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
+            countdownExposureTime(exposureTime);
+
+            getRelay()->off();
+            getStatus()->setMode(State::TEST_STRIP_SEQUENCE);
+
+            if (getStatus()->getStep() < MAX_STEP)
+            {
+                getStatus()->setStep(getStatus()->getStep() + 1); // Advance to the next step for the next exposure
+                displayExposingTime(0); // Clear the display after each step, ready for the next step to update it with the new time
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure step %d completed, preparing for next step", getStatus()->getStep());
+                vTaskDelay(pdMS_TO_TICKS(WAIT_BETWEEN_TEST_STRIP_STEPS_MS));
+            } else {
+                getDisplay()->setLEDState(0); // Turn off all LEDs after the last step
+                getStatus()->setMode(State::TEST_STRIP_CONFIG); // After the last step, return to config mode
+                displayTimeandGranularity(); // Display the base time and granularity again in config mode
+                Logger.log(MYLOG, ELOG_LEVEL_INFO, "Test strip exposure sequence completed");
+            }
+        } else if (currentState == State::FOCUS_LIGHT_ON) {
+            // Focus light is on, relay should be on
+            getRelay()->on();
+        } else {
+            // For other states, ensure relay is off
+            getRelay()->off();
+        }    
+}
+
 const char *ExposureTimer::getDisplayBuffer() const
 {
     return displayBuffer_;

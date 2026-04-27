@@ -130,6 +130,15 @@ public:
     void processInput(MsgType event, void *payload = nullptr);
 
     /**
+     * @brief Called by the ExposureTimer task to manage the exposure timing and control the relay. 
+     * This method checks if the exposure time has elapsed, turns off the relay if needed, and updates 
+     * the display with the remaining time. It also handles sending messages to the beeper manager for 
+     * audio feedback during the exposure.
+     * 
+     */
+    void exposureControl();
+
+    /**
      * @brief Get the Display Buffer object for formatting display strings
      * 
      * @return char* Pointer to the display buffer
@@ -161,11 +170,11 @@ private:
 
     void displayTime();
 
-
-
     void displayStep();
 
     void displayMessage(const char* message);
+
+    void countdownExposureTime(double exposureTime);    
 
     static ExposureTimer* instance_; /**< Static singleton instance pointer */
 
