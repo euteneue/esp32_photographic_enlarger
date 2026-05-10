@@ -135,9 +135,6 @@ void setup()
     xTaskCreate(beeper, "Beeper", 2048, NULL, 3, &beeperTask);
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "finished initialization...");
 
-     //testExposureCalculator();
-    timer->getDisplay()->setLEDState(2^7);
-    timer->getDisplay()->setLEDs(); 
 }
 
 void loop() {

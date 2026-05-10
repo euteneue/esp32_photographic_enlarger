@@ -408,6 +408,7 @@ void ExposureTimer::countdownExposureTime(double exposureTime)
 {
     double elapsedTime = 0;
     QueueItem msg;
+    long remainingTimeMs;
 
     while (elapsedTime < (exposureTime * 1000))
     {
@@ -418,19 +419,23 @@ void ExposureTimer::countdownExposureTime(double exposureTime)
             break;
         }
 
+        remainingTimeMs = (long) ((exposureTime*1000) - elapsedTime);
+
         // Every second, send a tick message to the beeper to provide audio feedback during the 
         // exposure. As beeping blocks the execution of the host task for a short time, we will
         // use a non-blocking approach to trigger the beeper every second without blocking the 
         // exposure timer task. This allows us to maintain accurate timing for the exposure while 
         // still providing regular audio feedback.
-        if ((long) ((exposureTime*1000) - elapsedTime) % 1000 < 90) 
+        if (remainingTimeMs % 1000 < 100) 
         {
             msg.type = MsgType::BEEPER_TICK;
             msg.payload = nullptr;
 
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure tick at %.2f seconds remaining", (exposureTime*1000 - elapsedTime) / 1000.0f);
+            
             xQueueSend(beeperQueue_, &msg, 0);
         }
+        //Logger.log(MYLOG, ELOG_LEVEL_INFO, "Exposure time remaining: %d milliseconds, modulo: %d", remainingTimeMs, remainingTimeMs % 1000);
         displayExposingTime((exposureTime * 1000) - elapsedTime);
         vTaskDelay(pdMS_TO_TICKS(100));
         elapsedTime += 100;
