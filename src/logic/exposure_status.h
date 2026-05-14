@@ -3,6 +3,7 @@
 
 #include "exposure_calculator.h"
 #include "config.h"
+#include <Preferences.h>
 
 
 /**
@@ -19,6 +20,9 @@ private:
     State mode;            /**< Current operating mode */
     Granularity granularity; /**< Current adjustment granularity */
     bool iterativeMode; /**< Whether test strip sequence is in iterative mode (true) or single step mode (false) */
+    String wifiSSID; /**< WiFi SSID for network connectivity */
+    String wifiPassword; /**< WiFi password for network connectivity */
+    Preferences preferences; /**< Preferences object for saving/loading settings */
 
 public:
     /**
@@ -102,6 +106,13 @@ public:
      * 
      */
     void toggleIterativeMode();
+
+    /**
+     * @brief Save the current exposure status to the non-volatile storage (Preferences) so that it can be restored on the next power-up. 
+     * This method should be called whenever there is a change in the exposure status that we want to persist, such as changes in exposure 
+     * time, step, mode, granularity, or iterative mode.
+     */
+    void saveToPreferences();
 };
 
 #endif // EXPOSURE_STATUS_H

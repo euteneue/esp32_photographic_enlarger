@@ -217,6 +217,9 @@ void ExposureTimer::displayMode()
             snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "");
             break;
     }
+
+    display_->setLEDState(0); // Clear LEDs when changing mode, specific modes will turn on LEDs as needed
+    display_->setLEDs();
 }
 
 
@@ -301,10 +304,13 @@ void ExposureTimer::displayMessage(const char *message)
  */
 void ExposureTimer::processInput(MsgType event, void *payload) 
 {
+    bool settingsChanged = false;
+
     switch (status_->getMode()) {
         case State::INITIAL:
             if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
+                settingsChanged = true;
                 displayMode();
             }
             break;
@@ -314,6 +320,7 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 displayMode();
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::TEST_STRIP_CONFIG);
+                settingsChanged = true;
                 displayMode();
             }
             break;
@@ -326,12 +333,14 @@ void ExposureTimer::processInput(MsgType event, void *payload)
         case State::TEST_STRIP_CONFIG:
             if (event == MsgType::BUTTON_MODE_PRESS) {
                 status_->setMode(State::TEST_STRIP_SEQUENCE);
-                status_->setStep(MIN_STEP);
+                status_->setStep(MIN_STEP);                
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FSTOP_EXPOSURE_CONFIG);
+                settingsChanged = true;
                 displayMode();
             } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
                 status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
+                settingsChanged = true;
                 display_->clear();
                 displayTimeandGranularity();
             } else if (event == MsgType::ENCODER_MODE_CHANGE) {
@@ -339,10 +348,12 @@ void ExposureTimer::processInput(MsgType event, void *payload)
 
                 modeValue = modeValue % NUM_GRANULARITY_LEVELS; // Wrap around to stay within 0-4
                 status_->setGranularity(static_cast<Granularity>(modeValue));
+                settingsChanged = true;
                 display_->clear();
                 displayTimeandGranularity();
             } else if (event == MsgType::ITERATIVE_BUTTON_PRESS) {
                 status_->toggleIterativeMode();
+                settingsChanged = true;
                 display_->clear();
 
                 status_->isIterativeMode() ? displayMessage("ITER ON ") : displayMessage("ITER OFF"); 
@@ -357,12 +368,14 @@ void ExposureTimer::processInput(MsgType event, void *payload)
             break;
         case State::FSTOP_EXPOSURE_CONFIG:
             if (event == MsgType::BUTTON_MODE_PRESS) {
-                status_->setMode(State::FSTOP_EXPOSURE);
+                status_->setMode(State::FSTOP_EXPOSURE);                
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
+                settingsChanged = true;
                 displayMode();
             } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
                 status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
+                settingsChanged = true;
                 display_->clear();
                 displayTimeandStep();
             } else if (event == MsgType::ENCODER_MODE_CHANGE) {
@@ -370,6 +383,7 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 int stepValue = (modeValue % NUM_STEPS) + MIN_STEP; // Wrap around to stay within -3 to +3
 
                 status_->setStep(stepValue);
+                settingsChanged = true;
                 display_->clear();
                 displayTimeandStep();
             }
@@ -377,7 +391,7 @@ void ExposureTimer::processInput(MsgType event, void *payload)
         case State::FSTOP_EXPOSURE:
             // Automatic transition back handled externally
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
-                status_->setMode(State::FSTOP_EXPOSURE_CONFIG);
+                status_->setMode(State::FSTOP_EXPOSURE_CONFIG);                
                 displayMode();
             }            
             break;
@@ -387,9 +401,11 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 status_->setMode(State::TIME_EXPOSURE);
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
+                settingsChanged = true;
                 displayMode();
             } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
                 status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
+                settingsChanged = true;
                 display_->clear();
                 displayTime();
             }
@@ -401,6 +417,10 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 displayMode();
             }            
             break;  
+    }
+
+    if (settingsChanged) {
+        status_->saveToPreferences(); // Save any changes to settings so they persist across power cycles
     }
 }
 

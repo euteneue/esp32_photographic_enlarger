@@ -1,19 +1,36 @@
 #include "exposure_status.h"
 #include "config.h"
+#include <ELog.h>
+
+#define STATUS_NAMESPACE "exp_status"
 
 
 // Constructors
 ExposureStatus::ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode) 
-    : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity), iterativeMode(iterativeMode) 
+    : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity), iterativeMode(iterativeMode), preferences() 
     {
 
     }
     
     
-ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs), iterativeMode(true) 
+ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs), iterativeMode(true), preferences() 
     {
+        // Load saved settings from preferences if available
+        if (preferences.begin(STATUS_NAMESPACE, true)) {
+            this->exposureTime = preferences.getFloat("exposureTime", exposureTime);
+            this->step = preferences.getInt("step", step);
+            this->mode = static_cast<State>(preferences.getInt("mode", static_cast<int>(mode)));
+            this->granularity = static_cast<Granularity>(preferences.getInt("granularity", static_cast<int>(granularity)));
+            this->iterativeMode = preferences.getBool("iterativeMode", iterativeMode);
+            preferences.end();
 
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Loaded exposure status from preferences: time=%.2f, step=%d, mode=%d, granularity=%d, iterativeMode=%d", 
+                this->exposureTime, this->step, static_cast<int>(this->mode), static_cast<int>(this->granularity), this->iterativeMode);
+        }            
     }
+
+
+
 
 // Getters
 
@@ -83,5 +100,22 @@ void ExposureStatus::toggleIterativeMode()
     if (this->mode == State::TEST_STRIP_CONFIG) 
     {
         this->iterativeMode = !this->iterativeMode;
+    }
+}
+
+void ExposureStatus::saveToPreferences()
+{
+    if (preferences.begin(STATUS_NAMESPACE, false)) {
+        preferences.putFloat("exposureTime", this->exposureTime);
+        preferences.putInt("step", this->step);
+        preferences.putInt("mode", static_cast<int>(this->mode));
+        preferences.putInt("granularity", static_cast<int>(this->granularity));
+        preferences.putBool("iterativeMode", this->iterativeMode);
+        preferences.end();
+
+        Logger.log(MYLOG, ELOG_LEVEL_INFO, "Saved exposure status to preferences: time=%.2f, step=%d, mode=%d, granularity=%d, iterativeMode=%d", 
+            this->exposureTime, this->step, static_cast<int>(this->mode), static_cast<int>(this->granularity), this->iterativeMode);
+    } else {
+        Logger.log(MYLOG, ELOG_LEVEL_ERROR, "Failed to open preferences for writing exposure status");
     }
 }

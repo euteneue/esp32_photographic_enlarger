@@ -27,16 +27,16 @@ double ExposureCalculator::calculateTestStripTime(double baseTime, Granularity g
         
         if (step == MIN_STEP) 
         {
-            return baseTime * pow(2.0, step * incrementFactor);
+            return std::round(baseTime * pow(2.0, step * incrementFactor)*10) / 10.0; // Round to 1 decimal place to prevent a crazy bug: if the resulting time is something like 0.35 the display will seem to hesitate
         } else {
             double previousTime = baseTime * pow(2.0, (step-1) * incrementFactor);
             double currentTime = baseTime * pow(2.0, step * incrementFactor);
-            return currentTime - previousTime;
+            return std::round((currentTime - previousTime) * 10) / 10.0; // Round to 1 decimal place
         }
 
     } else {
         // Single step mode: each step has its own calculated time
-        return baseTime * pow(2.0, step * incrementFactor);
+        return std::round(baseTime * pow(2.0, step * incrementFactor) * 10) / 10.0; // Round to 1 decimal place
     }
 }
 
@@ -54,7 +54,7 @@ double ExposureCalculator::calculateExposureTime(double baseTime, Granularity gr
     }
     
     double incrementFactor = getIncrementFactor(granularity);
-    return baseTime * pow(2.0, step * incrementFactor);
+    return std::round(baseTime * pow(2.0, step * incrementFactor) * 10) / 10.0; // Round to 1 decimal place
 }
 
 /**
