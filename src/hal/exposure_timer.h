@@ -6,6 +6,7 @@
 #include "tm1638_interface.h"
 #include <Arduino.h>
 #include <AiEsp32RotaryEncoder.h>
+#include <Bounce2.h>
 #include "beeper.h"
 #include "config.h"
 
@@ -26,6 +27,7 @@ public:
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
      * @param beeper Beeper instance for audio feedback
+     * @param footSwitch Pointer to the foot switch button instance
      * @param inputQueue Queue handle for simulating input events from state manager
      * @param displayQueue Queue handle for sending display update messages to display manager
      * @return Reference to the singleton ExposureTimer instance
@@ -35,6 +37,7 @@ public:
                                      AiEsp32RotaryEncoder* encoderMode = nullptr, 
                                      TM1638Interface* display = nullptr,
                                      Beeper* beeper = nullptr, 
+                                     Bounce2::Button* footSwitch = nullptr,
                                      QueueHandle_t inputQueue = nullptr, 
                                      QueueHandle_t displayQueue = nullptr,
                                      QueueHandle_t beeperQueue = nullptr);
@@ -56,35 +59,6 @@ public:
      * 
      */
     void setup();
-
-    /**
-     * @brief Start an exposure with the given duration
-     * @param durationMs Duration of exposure in milliseconds
-     */
-    void start(float durationMs);
-
-    /**
-     * @brief Update the exposure timer (call periodically from task)
-     * @return true if exposure just completed, false otherwise
-     */
-    bool tick();
-
-    /**
-     * @brief Check if exposure is currently in progress
-     * @return true if exposing, false otherwise
-     */
-    bool isExposing() const;
-
-    /**
-     * @brief Get the remaining exposure time in milliseconds
-     * @return Remaining time in milliseconds
-     */
-    float getRemainingTime() const;
-
-    /**
-     * @brief Cancel the current exposure
-     */
-    void cancel();
 
     /**
      * @brief Get pointer to the relay instance
@@ -172,11 +146,12 @@ private:
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
      * @param beeper Beeper instance for audio feedback
+     * @param footSwitch Pointer to the foot switch button instance
      * @param inputQueue Queue handle for simulating input events from state manager
      * @param displayQueue Queue handle for sending display update messages to display manager
      * @param beeperQueue Queue handle for sending beeper update messages to beeper manager
      */
-    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue);
+    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue);
 
     void displayMode();
 
@@ -199,7 +174,9 @@ private:
     AiEsp32RotaryEncoder* encoderValue_;        /**< Pointer to value adjustment encoder */
     AiEsp32RotaryEncoder* encoderMode_;         /**< Pointer to mode adjustment encoder */
     TM1638Interface* display_;                  /**< Pointer to display interface */
-    Beeper* beeper_;                                /**< Beeper instance for audio feedback */   
+    Beeper* beeper_;                            /**< Beeper instance for audio feedback */  
+    Bounce2::Button* footSwitch_;                /**< Pointer to foot switch button instance */
+    
     bool exposing_;                             /**< Flag indicating if exposure is active */
     float remainingTimeMs_;                     /**< Remaining exposure time in milliseconds */
     unsigned long lastTickMs_;                  /**< Timestamp of last tick for timing calculations */

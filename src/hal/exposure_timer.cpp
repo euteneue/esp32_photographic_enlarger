@@ -10,13 +10,14 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
                                          AiEsp32RotaryEncoder* encoderMode, 
                                          TM1638Interface* display,
                                          Beeper* beeper, 
+                                         Bounce2::Button* footSwitch,
                                          QueueHandle_t inputQueue, 
                                          QueueHandle_t displayQueue,
                                          QueueHandle_t beeperQueue) {
     if (instance_ == nullptr) {
         // Create instance only if it doesn't exist and we have all required parameters
-        if (status && relay && encoderValue && encoderMode && display && beeper && inputQueue && displayQueue && beeperQueue) {
-            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, beeper, inputQueue, displayQueue, beeperQueue);
+        if (status && relay && encoderValue && encoderMode && display && beeper && footSwitch && inputQueue && displayQueue && beeperQueue) {
+            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, beeper, footSwitch, inputQueue, displayQueue, beeperQueue);
         } else {
             // If instance doesn't exist but parameters are null, this is an error
             // In a real implementation, you might want to handle this differently
@@ -27,15 +28,27 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
 }
 
 
-ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue)
-    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
+ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue)
+    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), footSwitch_(footSwitch), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
 {
 
+    // After initialization, ensure that the rotary encoders are initialized to the values corresponding to the current state
+    encoderValue_->setEncoderValue(status_->getExposureTime() * 10); // Assuming encoder steps of 0.1s, so we multiply by 10 to convert to encoder units
+    Logger.log(MYLOG, ELOG_LEVEL_INFO, "Initialized value encoder to %d based on exposure time %.2f", status_->getExposureTime() * 10, status_->getExposureTime());
+    
+    if (status_->getMode() == State::TEST_STRIP_CONFIG) {
+        encoderMode_->setEncoderValue(static_cast<long>(status_->getGranularity())); // Set initial position of mode encoder based on current granularity
+        Logger.log(MYLOG, ELOG_LEVEL_INFO, "Initialized mode encoder to %d based on granularity %d", static_cast<long>(status_->getGranularity()), status_->getGranularity());
+    } else if (status_->getMode() == State::FSTOP_EXPOSURE_CONFIG) {
+        encoderMode_->setEncoderValue(static_cast<long>(status_->getStep() - MIN_STEP)); // Set initial position of mode encoder based on current step, adjusting for MIN_STEP offset
+        Logger.log(MYLOG, ELOG_LEVEL_INFO, "Initialized mode encoder to %d based on step %d", static_cast<long>(status_->getStep() - MIN_STEP), status_->getStep());
+    }
+    
 }
 
 ExposureTimer::~ExposureTimer() 
 {
-    cancel();
+    //cancel();
 
     // Note: In a singleton pattern, we typically don't delete the owned objects
     // here as they might be used elsewhere. The singleton instance itself
@@ -70,7 +83,7 @@ void ExposureTimer::setup()
     encoderValue_->setAcceleration(250); //or set the value - larger number = more accelearation; 0 or 1 means disabled acceleration
 
     display_->setBrightness(0);
-    display_->setLEDState(0); // Start with all LEDs off
+    display_->setLEDState(2^7); // Start with all LEDs off
     display_->setLEDs();
     displayMode();
 
@@ -120,52 +133,6 @@ Beeper* ExposureTimer::getBeeper() const
 ExposureStatus* ExposureTimer::getStatus() const
 {
     return status_;
-}
-
-
-void ExposureTimer::start(float durationMs) 
-{
-    relay_->on();
-    exposing_ = true;
-    remainingTimeMs_ = durationMs;
-    lastTickMs_ = millis();
-}
-
-bool ExposureTimer::tick() {
-    if (!exposing_) {
-        return false;
-    }
-
-    unsigned long currentTimeMs = millis();
-    unsigned long elapsedMs = currentTimeMs - lastTickMs_;
-    lastTickMs_ = currentTimeMs;
-
-    remainingTimeMs_ -= elapsedMs;
-
-    if (remainingTimeMs_ <= 0) {
-        relay_->off();
-        exposing_ = false;
-        remainingTimeMs_ = 0;
-        return true;  // Exposure just completed
-    }
-
-    return false;
-}
-
-bool ExposureTimer::isExposing() const {
-    return exposing_;
-}
-
-float ExposureTimer::getRemainingTime() const {
-    return remainingTimeMs_;
-}
-
-void ExposureTimer::cancel() {
-    if (exposing_) {
-        relay_->off();
-        exposing_ = false;
-        remainingTimeMs_ = 0;
-    }
 }
 
 void ExposureTimer::refreshDisplay() 
@@ -544,7 +511,21 @@ void ExposureTimer::exposureControl()
 
 void ExposureTimer::handleInput()
 {
-      uint8_t tmButtons = getDisplay()->getButtons();
+        uint8_t tmButtons = getDisplay()->getButtons();
+
+        
+        footSwitch_->update(); // Update the state of the foot switch button
+
+        if (footSwitch_->pressed()) // Foot switch has been pressed
+        {
+            msg_.type = MsgType::FOOT_SWITCH_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the foot switch");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }
+        
 
         if (tmButtons & MODE_BUTTON) // Mode button has been pressed
         {

@@ -96,6 +96,8 @@ void testExposureCalculator()
 
 void setup() 
 {
+    Bounce2::Button *footSwitch = new Bounce2::Button();
+
     Serial.begin(115200);
     Logger.registerSerial(MYLOG, ELOG_LEVEL_DEBUG, "DarkroomTimer", Serial);
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Darkroom Timer...");
@@ -113,12 +115,19 @@ void setup()
     tm1638Mutex = xSemaphoreCreateMutex();
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing peripherals...");
+
+    footSwitch->attach(FOOT_SWITCH_PIN, INPUT_PULLUP);
+    footSwitch->interval(25); // Set debounce interval to 25ms
+    footSwitch->setPressedState(LOW); // Set pressed state to LOW (active low)
+
+
     timer = &ExposureTimer::getInstance(new ExposureStatus(),
                               new Relay(RELAY_PIN), 
                               new AiEsp32RotaryEncoder(ENCODER1_DT, ENCODER1_CLK, ENCODER1_SW, ENCODER1_VCC, ENCODER1_STEPS), 
                               new AiEsp32RotaryEncoder(ENCODER2_DT, ENCODER2_CLK, ENCODER2_SW, ENCODER2_VCC, ENCODER2_STEPS), 
                               new TM1638Interface(TM1638_DIO, TM1638_CLK, TM1638_STB, tm1638Mutex),
                               new Beeper(BEEPER_PIN),
+                              footSwitch,
                               inputQueue,
                               displayQueue,
                               beeperQueue);

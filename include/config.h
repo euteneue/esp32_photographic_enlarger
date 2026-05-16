@@ -3,6 +3,9 @@
 
 // Pin definitions
 #define RELAY_PIN 32    // relay #1 controls the enlarger light
+
+#define FOOT_SWITCH_PIN 34 // GPIO pin for foot switch input (if applicable)
+
 #define TM1638_DIO 21   // TM1638 data pin 
 #define TM1638_CLK 22   // TM1638 clock pin
 #define TM1638_STB 23   // TM1638 strobe pin
