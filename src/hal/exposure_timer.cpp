@@ -1,6 +1,6 @@
 #include "exposure_timer.h"
 #include <Arduino.h>
-#include <ELog.h>
+#include <Elog.h>
 
 // Initialize static instance
 ExposureTimer* ExposureTimer::instance_ = nullptr;

@@ -2,7 +2,6 @@
 #define EXPOSURE_TIMER_H
 
 #include "relay.h"
-#include "rotary_encoder_interface.h"
 #include "tm1638_interface.h"
 #include <Arduino.h>
 #include <AiEsp32RotaryEncoder.h>
