@@ -1,6 +1,6 @@
 #include "config.h"
 #include "tm1638_interface.h"
-#include <ELog.h>
+#include <Elog.h>
 
 TM1638Interface::TM1638Interface(int dio, int clk, int stb, SemaphoreHandle_t mutex) : tm1638_(stb, clk, dio, true), tm1638Mutex_(mutex), lastButtonsState_(0), lastButtonReadTime_(0), currentButtonsState_(0) {
     

@@ -1,6 +1,6 @@
 #include "exposure_status.h"
 #include "config.h"
-#include <ELog.h>
+#include <Elog.h>
 
 #define STATUS_NAMESPACE "exp_status"
 
