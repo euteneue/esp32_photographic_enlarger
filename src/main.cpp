@@ -122,7 +122,8 @@ void setup()
 
 
     timer = &ExposureTimer::getInstance(new ExposureStatus(),
-                              new Relay(RELAY_PIN), 
+                              new Relay(RELAY_1_PIN), 
+                              new Relay(RELAY_2_PIN),
                               new AiEsp32RotaryEncoder(ENCODER1_DT, ENCODER1_CLK, ENCODER1_SW, ENCODER1_VCC, ENCODER1_STEPS), 
                               new AiEsp32RotaryEncoder(ENCODER2_DT, ENCODER2_CLK, ENCODER2_SW, ENCODER2_VCC, ENCODER2_STEPS), 
                               new TM1638Interface(TM1638_DIO, TM1638_CLK, TM1638_STB, tm1638Mutex),

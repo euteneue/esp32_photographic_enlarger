@@ -5,7 +5,9 @@
 // Initialize static instance
 ExposureTimer* ExposureTimer::instance_ = nullptr;
 
-ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay, 
+ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, 
+                                         Relay* relayOne, 
+                                         Relay* relayTwo,
                                          AiEsp32RotaryEncoder* encoderValue, 
                                          AiEsp32RotaryEncoder* encoderMode, 
                                          TM1638Interface* display,
@@ -16,8 +18,8 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
                                          QueueHandle_t beeperQueue) {
     if (instance_ == nullptr) {
         // Create instance only if it doesn't exist and we have all required parameters
-        if (status && relay && encoderValue && encoderMode && display && beeper && footSwitch && inputQueue && displayQueue && beeperQueue) {
-            instance_ = new ExposureTimer(status, relay, encoderValue, encoderMode, display, beeper, footSwitch, inputQueue, displayQueue, beeperQueue);
+        if (status && relayOne && relayTwo && encoderValue && encoderMode && display && beeper && footSwitch && inputQueue && displayQueue && beeperQueue) {
+            instance_ = new ExposureTimer(status, relayOne, relayTwo, encoderValue, encoderMode, display, beeper, footSwitch, inputQueue, displayQueue, beeperQueue);
         } else {
             // If instance doesn't exist but parameters are null, this is an error
             // In a real implementation, you might want to handle this differently
@@ -28,8 +30,8 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, Relay* relay,
 }
 
 
-ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue)
-    : status_(status), relay_(relay), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), footSwitch_(footSwitch), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
+ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relayOne, Relay* relayTwo, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue)
+    : status_(status), relayOne_(relayOne), relayTwo_(relayTwo), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), footSwitch_(footSwitch), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
 {
 
     // After initialization, ensure that the rotary encoders are initialized to the values corresponding to the current state
@@ -54,7 +56,8 @@ ExposureTimer::~ExposureTimer()
     // here as they might be used elsewhere. The singleton instance itself
     // should be cleaned up explicitly if needed.
     // delete status_;
-    // delete relay_;
+    // delete relayOne_;
+    // delete relayTwo_;
     // delete encoderValue_;
     // delete encoderMode_;
     // delete display_;
@@ -105,9 +108,14 @@ void IRAM_ATTR ExposureTimer::readEncoderValueISR()
     }
 }
 
-Relay* ExposureTimer::getRelay() const
+Relay* ExposureTimer::getRelayOne() const
 {
-    return relay_;
+    return relayOne_;
+}
+
+Relay* ExposureTimer::getRelayTwo() const
+{
+    return relayTwo_;
 }
 
 AiEsp32RotaryEncoder* ExposureTimer::getEncoderValue() const
@@ -230,7 +238,7 @@ void ExposureTimer::displayTime()
 {
     // Display the exposure time on the first 4 digits, and blank the last 4 digits
 
-    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "%4.1f     ", status_->getExposureTime());
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, " %4.1f    ", status_->getExposureTime());
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);
 }
@@ -448,12 +456,14 @@ void ExposureTimer::exposureControl()
                 getStatus()->getStep()
             );
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting F-Stop exposure for %.2f seconds", exposureTime);
-            getRelay()->on();
+            getRelayOne()->on();
+            getRelayTwo()->on();
 
             // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
             countdownExposureTime(exposureTime);
 
-            getRelay()->off();
+            getRelayOne()->off();
+            getRelayTwo()->off();
             getStatus()->setMode(State::FSTOP_EXPOSURE_CONFIG);
             displayTimeandStep();
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "F-Stop exposure completed");
@@ -461,12 +471,14 @@ void ExposureTimer::exposureControl()
             double exposureTime = getStatus()->getExposureTime();
 
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting Time-based exposure for %.2f seconds", exposureTime);
-            getRelay()->on();
+            getRelayOne()->on();
+            getRelayTwo()->on();
 
             // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
             countdownExposureTime(exposureTime);
 
-            getRelay()->off();
+            getRelayOne()->off();
+            getRelayTwo()->off();
             getStatus()->setMode(State::TIME_EXPOSURE_CONFIG);     
             displayTime();       
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Time-based exposure completed");
@@ -480,12 +492,14 @@ void ExposureTimer::exposureControl()
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "Starting test strip exposure step %d for %.2f seconds, iter: %d", getStatus()->getStep(), exposureTime, getStatus()->isIterativeMode());
             getDisplay()->setLEDState(1 << (getStatus()->getStep()-MIN_STEP)); // Light up the LED corresponding to the current step
             
-            getRelay()->on();
-            
+            getRelayOne()->on();
+            getRelayTwo()->on();
+
             // Instead of using vTaskDelay, we will use a loop to check for cancellation every 100ms
             countdownExposureTime(exposureTime);
 
-            getRelay()->off();
+            getRelayOne()->off();
+            getRelayTwo()->off();
             getStatus()->setMode(State::TEST_STRIP_SEQUENCE);
 
             if (getStatus()->getStep() < MAX_STEP)
@@ -502,10 +516,12 @@ void ExposureTimer::exposureControl()
             }
         } else if (currentState == State::FOCUS_LIGHT_ON) {
             // Focus light is on, relay should be on
-            getRelay()->on();
+            getRelayOne()->on();
+            getRelayTwo()->on();
         } else {
             // For other states, ensure relay is off
-            getRelay()->off();
+            getRelayOne()->off();
+            getRelayTwo()->off();
         }    
 }
 

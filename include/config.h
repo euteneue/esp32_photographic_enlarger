@@ -2,7 +2,8 @@
 #define CONFIG_H
 
 // Pin definitions
-#define RELAY_PIN 32    // relay #1 controls the enlarger light
+#define RELAY_1_PIN 32    // relay #1 controls the enlarger first wire
+#define RELAY_2_PIN 33    // relay #2 controls the enlarger second wire (necessary because european style plugs have live and neutral reversed in different outlets, so we can't assume which relay will control the live wire that needs to be switched for the enlarger to turn on/off) 
 
 #define FOOT_SWITCH_PIN 34 // GPIO pin for foot switch input (if applicable)
 
@@ -28,8 +29,8 @@
 #define BASE_FSTOP_DEFAULT 0
 
 #define MODE_BUTTON 0x01 // Bitmask for mode button on TM1638
-#define CANCEL_BUTTON 0x02 // Bitmask for cancel button on TM1638
-#define ITERATIVE_BUTTON 0x04 // Bitmask for button toggling between iterative and single step exposure mode for test strip sequence 
+#define CANCEL_BUTTON 0x04 // Bitmask for cancel button on TM1638
+#define ITERATIVE_BUTTON 0x10 // Bitmask for button toggling between iterative and single step exposure mode for test strip sequence 
 
 #define MYLOG 0
 

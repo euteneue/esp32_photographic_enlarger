@@ -21,7 +21,8 @@ public:
     /**
      * @brief Get the singleton instance of ExposureTimer
      * @param status Pointer to the ExposureStatus object to track current status
-     * @param relay Pointer to the Relay instance to control
+     * @param relayOne Pointer to the first Relay instance to control
+     * @param relayTwo Pointer to the second Relay instance to control
      * @param encoderValue Pointer to the rotary encoder instance for value adjustment
      * @param encoderMode Pointer to the rotary encoder instance for mode adjustment
      * @param display Pointer to the TM1638 display instance
@@ -31,7 +32,9 @@ public:
      * @param displayQueue Queue handle for sending display update messages to display manager
      * @return Reference to the singleton ExposureTimer instance
      */
-    static ExposureTimer& getInstance(ExposureStatus* status = nullptr, Relay* relay = nullptr, 
+    static ExposureTimer& getInstance(ExposureStatus* status = nullptr, 
+                                     Relay* relayOne = nullptr, 
+                                     Relay* relayTwo = nullptr,
                                      AiEsp32RotaryEncoder* encoderValue = nullptr, 
                                      AiEsp32RotaryEncoder* encoderMode = nullptr, 
                                      TM1638Interface* display = nullptr,
@@ -60,10 +63,16 @@ public:
     void setup();
 
     /**
-     * @brief Get pointer to the relay instance
+     * @brief Get pointer to the first relay instance
      * @return Pointer to the Relay object
      */
-    Relay* getRelay() const;
+    Relay* getRelayOne() const;
+
+    /**
+     * @brief Get pointer to the second relay instance
+     * @return Pointer to the Relay object
+     */
+    Relay *getRelayTwo() const;
 
     /**
      * @brief Get pointer to the value encoder instance
@@ -150,7 +159,7 @@ private:
      * @param displayQueue Queue handle for sending display update messages to display manager
      * @param beeperQueue Queue handle for sending beeper update messages to beeper manager
      */
-    ExposureTimer(ExposureStatus* status, Relay* relay, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue);
+    ExposureTimer(ExposureStatus* status, Relay* relayOne, Relay* relayTwo, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue);
 
     void displayMode();
 
@@ -169,7 +178,8 @@ private:
     static ExposureTimer* instance_; /**< Static singleton instance pointer */
 
     ExposureStatus* status_;                    /**< Pointer to exposure status */
-    Relay* relay_;                              /**< Pointer to relay controller */
+    Relay* relayOne_;                           /**< Pointer to relay controller */
+    Relay* relayTwo_;                           /**< Pointer to second relay controller (if needed for switching live/neutral) */
     AiEsp32RotaryEncoder* encoderValue_;        /**< Pointer to value adjustment encoder */
     AiEsp32RotaryEncoder* encoderMode_;         /**< Pointer to mode adjustment encoder */
     TM1638Interface* display_;                  /**< Pointer to display interface */
