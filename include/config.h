@@ -5,7 +5,7 @@
 #define RELAY_1_PIN 32    // relay #1 controls the enlarger first wire
 #define RELAY_2_PIN 33    // relay #2 controls the enlarger second wire (necessary because european style plugs have live and neutral reversed in different outlets, so we can't assume which relay will control the live wire that needs to be switched for the enlarger to turn on/off) 
 
-#define FOOT_SWITCH_PIN 34 // GPIO pin for foot switch input (if applicable)
+#define FOOT_SWITCH_PIN 27 // GPIO pin for foot switch input (if applicable)
 
 #define TM1638_DIO 21   // TM1638 data pin 
 #define TM1638_CLK 22   // TM1638 clock pin
@@ -50,6 +50,8 @@
 #define TM_LED_COUNT (TM_MAX_LED+1) // Number of LEDs on the TM1638 module
 
 #define WAIT_BETWEEN_TEST_STRIP_STEPS_MS 2000 // Time to wait between test strip steps in milliseconds
+
+#define MODE_DISPLAY_TIME_MS 750 // Time to display mode change message in milliseconds
 
 
 

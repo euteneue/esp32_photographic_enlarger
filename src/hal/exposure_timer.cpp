@@ -7,7 +7,7 @@ ExposureTimer* ExposureTimer::instance_ = nullptr;
 
 ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status, 
                                          Relay* relayOne, 
-                                         Relay* relayTwo,
+                                          Relay* relayTwo,
                                          AiEsp32RotaryEncoder* encoderValue, 
                                          AiEsp32RotaryEncoder* encoderMode, 
                                          TM1638Interface* display,
@@ -297,6 +297,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 status_->setMode(State::TEST_STRIP_CONFIG);
                 settingsChanged = true;
                 displayMode();
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
+                displayTimeandGranularity(); // Update display to show initial parameters for test strip configuration mode
             }
             break;
         case State::FOCUS_LIGHT_ON:
@@ -313,6 +315,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 status_->setMode(State::FSTOP_EXPOSURE_CONFIG);
                 settingsChanged = true;
                 displayMode();
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
+                displayTimeandStep(); // Update display to show initial parameters for f-stop exposure configuration mode
             } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
                 status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
                 settingsChanged = true;
@@ -332,6 +336,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 display_->clear();
 
                 status_->isIterativeMode() ? displayMessage("ITER ON ") : displayMessage("ITER OFF"); 
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the iterative mode change message before updating the display with the current time and granularity
+                displayTimeandGranularity();
             }
             break;
         case State::TEST_STRIP_SEQUENCE:
@@ -348,6 +354,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
                 settingsChanged = true;
                 displayMode();
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
+                displayTime(); // Update display to show initial parameters for time-based exposure configuration mode
             } else if (event == MsgType::ENCODER_VALUE_CHANGE) {
                 status_->setExposureTime(*((long*) payload) * 0.1f); // Assuming encoder steps of 0.1s
                 settingsChanged = true;
@@ -368,6 +376,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
                 status_->setMode(State::FSTOP_EXPOSURE_CONFIG);                
                 displayMode();
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
+                displayTimeandStep(); // Update display to show current parameters for f-stop exposure configuration mode
             }            
             break;
         
@@ -390,6 +400,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
                 displayMode();
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
+                displayTime(); // Update display to show current parameters for time-based exposure configuration mode
             }            
             break;  
     }
