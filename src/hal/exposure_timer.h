@@ -30,6 +30,7 @@ public:
      * @param footSwitch Pointer to the foot switch button instance
      * @param inputQueue Queue handle for simulating input events from state manager
      * @param displayQueue Queue handle for sending display update messages to display manager
+     * @param exposureControlQueue Queue handle for sending exposure control messages to the exposure control task
      * @return Reference to the singleton ExposureTimer instance
      */
     static ExposureTimer& getInstance(ExposureStatus* status = nullptr, 
@@ -42,7 +43,8 @@ public:
                                      Bounce2::Button* footSwitch = nullptr,
                                      QueueHandle_t inputQueue = nullptr, 
                                      QueueHandle_t displayQueue = nullptr,
-                                     QueueHandle_t beeperQueue = nullptr);
+                                     QueueHandle_t beeperQueue = nullptr,
+                                     QueueHandle_t exposureControlQueue = nullptr);
 
 
     /**
@@ -158,8 +160,9 @@ private:
      * @param inputQueue Queue handle for simulating input events from state manager
      * @param displayQueue Queue handle for sending display update messages to display manager
      * @param beeperQueue Queue handle for sending beeper update messages to beeper manager
+     * @param exposureControlQueue Queue handle for sending exposure control messages to the exposure control task
      */
-    ExposureTimer(ExposureStatus* status, Relay* relayOne, Relay* relayTwo, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue);
+    ExposureTimer(ExposureStatus* status, Relay* relayOne, Relay* relayTwo, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue, QueueHandle_t exposureControlQueue);
 
     void displayMode();
 
@@ -195,7 +198,7 @@ private:
     QueueHandle_t inputQueue_;                  /**< Queue for simulating input events from state manager */
     QueueHandle_t displayQueue_;                /**< Queue for sending display update messages to display manager */   
     QueueHandle_t beeperQueue_;                 /**< Queue for sending beeper update messages to beeper manager */
-
+    QueueHandle_t exposureControlQueue_;        /**< Queue for sending exposure control messages to the exposure control task */
     char displayBuffer_[MAX_DISPLAY_STR_LEN+1]; /**< Buffer for formatting display strings */
  
 

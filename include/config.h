@@ -31,6 +31,7 @@
 #define MODE_BUTTON 0x01 // Bitmask for mode button on TM1638
 #define CANCEL_BUTTON 0x04 // Bitmask for cancel button on TM1638
 #define ITERATIVE_BUTTON 0x10 // Bitmask for button toggling between iterative and single step exposure mode for test strip sequence 
+#define AUTO_ADVANCE_BUTTON 0x40 // Bitmask for button toggling auto-advance of test strip sequence after each exposure
 
 #define MYLOG 0
 
@@ -66,6 +67,7 @@ enum MsgType {
     MODE_BUTTON_PRESS,   /**< Mode button pressed on TM1638 */
     CANCEL_BUTTON_PRESS, /**< Cancel button pressed on TM1638 */
     ITERATIVE_BUTTON_PRESS, /**< Iterative button pressed on TM1638 */
+    AUTO_ADVANCE_BUTTON_PRESS, /**< Auto-advance button pressed on TM1638 */
     FOOT_SWITCH_PRESS,    /**< Foot switch pressed (if applicable) */
     BUTTON_VALUE_PRESS,   /**< Value encoder button pressed */
     BUTTON_MODE_PRESS,    /**< Mode encoder button pressed */

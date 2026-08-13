@@ -27,6 +27,7 @@ TaskHandle_t beeperTask;
 QueueHandle_t inputQueue;
 QueueHandle_t displayQueue;
 QueueHandle_t beeperQueue;
+QueueHandle_t exposureControlQueue;
 
 SemaphoreHandle_t tm1638Mutex;
 
@@ -45,55 +46,6 @@ void exposureTimer(void *pvParameters);
 void stateManager(void *pvParameters);
 void beeper(void *pvParameters);
 
-
-void testExposureCalculator() 
-{
-    double baseTime = 10.0; // seconds
-
-    Serial.printf("Calculating exposure times for base time: %.1f seconds and full stop granularity, single step mode\n", baseTime);
-    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
-    {
-        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::FullStops, fstop, false);
-        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
-    }
-
-    Serial.printf("Calculating exposure times for base time: %.1f seconds and full stop granularity, incremental mode\n", baseTime);
-    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
-    {
-        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::FullStops, fstop, true);
-        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
-    }
-
-    Serial.printf("Calculating exposure times for base time: %.1f seconds and half stop granularity, single step mode\n", baseTime);
-    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
-    {
-        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Halfs, fstop, false);
-        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
-    }
-
-    Serial.printf("Calculating exposure times for base time: %.1f seconds and half stop granularity, incremental mode\n", baseTime);
-    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
-    {
-        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Halfs, fstop, true);
-        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
-    }    
-
-    Serial.printf("Calculating exposure times for base time: %.1f seconds and third stop granularity, single step mode\n", baseTime);
-    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
-    {
-        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Thirds, fstop, false);
-        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
-    }
-
-    Serial.printf("Calculating exposure times for base time: %.1f seconds and third stop granularity, incremental mode\n", baseTime);
-    for (int fstop = MIN_STEP; fstop <= MAX_STEP; fstop++) 
-    {
-        double time = ExposureCalculator::calculateTestStripTime(baseTime, Granularity::Thirds, fstop, true);
-        Serial.printf("BaseTime: %.1f s, Current F-Stop: %d => Calculated Time: %.1f s\n", baseTime, fstop, time);
-    }    
-}
-
-
 void setup() 
 {
     Bounce2::Button *footSwitch = new Bounce2::Button();
@@ -108,6 +60,7 @@ void setup()
     inputQueue = xQueueCreate(10, sizeof(QueueItem));
     displayQueue = xQueueCreate(10, sizeof(QueueItem));
     beeperQueue = xQueueCreate(10, sizeof(QueueItem));
+    exposureControlQueue = xQueueCreate(10, sizeof(QueueItem));
 
     // Create mutex to serialize TM1638 display / button access. This is necessary because the display and 
     // button handling code in the TM1638 library is not thread safe, and we need to ensure that only one 
@@ -131,7 +84,8 @@ void setup()
                               footSwitch,
                               inputQueue,
                               displayQueue,
-                              beeperQueue);
+                              beeperQueue,
+                              exposureControlQueue);
 
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "initializing rotary encoders...");                              

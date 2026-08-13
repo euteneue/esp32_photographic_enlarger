@@ -20,6 +20,7 @@ private:
     State mode;            /**< Current operating mode */
     Granularity granularity; /**< Current adjustment granularity */
     bool iterativeMode; /**< Whether test strip sequence is in iterative mode (true) or single step mode (false) */
+    bool autoAdvanceTestStrip; /**< Whether to automatically advance to the next step in the test strip sequence after each exposure */
     String wifiSSID; /**< WiFi SSID for network connectivity */
     String wifiPassword; /**< WiFi password for network connectivity */
     Preferences preferences; /**< Preferences object for saving/loading settings */
@@ -32,8 +33,9 @@ public:
      * @param mode Initial operating mode
      * @param granularity Initial adjustment granularity
      * @param iterativeMode Initial test strip sequence mode (iterative or single step)
+     * @param autoAdvanceTestStrip Whether to automatically advance the test strip step after each exposure
      */
-    ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode);
+    ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode, bool autoAdvanceTestStrip);
 
     /**
      * @brief Construct a new ExposureStatus object with default values
@@ -100,6 +102,19 @@ public:
      * @param granularity New granularity setting
      */
     void setGranularity(Granularity granularity);
+
+    /**
+     * @brief Get whether the test strip should auto advance after each exposure
+     * @return true if automatic advancement is enabled
+     * @return false if manual advancement is required
+     */
+    bool getAutoAdvanceTestStrip() const;
+
+    /**
+     * @brief Set whether the test strip should auto advance after each exposure
+     * @param autoAdvanceTestStrip New auto-advance setting
+     */
+    void setAutoAdvanceTestStrip(bool autoAdvanceTestStrip);
 
     /**
      * @brief Toggle between iterative and single step mode for test strip sequence

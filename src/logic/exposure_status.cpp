@@ -6,14 +6,14 @@
 
 
 // Constructors
-ExposureStatus::ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode) 
-    : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity), iterativeMode(iterativeMode), preferences() 
+ExposureStatus::ExposureStatus(double exposureTime, int step, State mode, Granularity granularity, bool iterativeMode, bool autoAdvanceTestStrip) 
+    : exposureTime(exposureTime), step(step), mode(mode), granularity(granularity), iterativeMode(iterativeMode), autoAdvanceTestStrip(autoAdvanceTestStrip), preferences() 
     {
 
     }
     
     
-ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs), iterativeMode(true), preferences() 
+ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mode(State::INITIAL), granularity(Granularity::Halfs), iterativeMode(true), autoAdvanceTestStrip(false), preferences() 
     {
         // Load saved settings from preferences if available
         if (preferences.begin(STATUS_NAMESPACE, true)) {
@@ -22,10 +22,11 @@ ExposureStatus::ExposureStatus() : exposureTime(MIN_EXPOSURE_TIME), step(0), mod
             this->mode = static_cast<State>(preferences.getInt("mode", static_cast<int>(mode)));
             this->granularity = static_cast<Granularity>(preferences.getInt("granularity", static_cast<int>(granularity)));
             this->iterativeMode = preferences.getBool("iterativeMode", iterativeMode);
+            this->autoAdvanceTestStrip = preferences.getBool("autoAdvanceTestStrip", autoAdvanceTestStrip);
             preferences.end();
 
-            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Loaded exposure status from preferences: time=%.2f, step=%d, mode=%d, granularity=%d, iterativeMode=%d", 
-                this->exposureTime, this->step, static_cast<int>(this->mode), static_cast<int>(this->granularity), this->iterativeMode);
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "Loaded exposure status from preferences: time=%.2f, step=%d, mode=%d, granularity=%d, iterativeMode=%d, autoAdvanceTestStrip=%d", 
+                this->exposureTime, this->step, static_cast<int>(this->mode), static_cast<int>(this->granularity), this->iterativeMode, this->autoAdvanceTestStrip);
         }            
     }
 
@@ -57,6 +58,16 @@ Granularity ExposureStatus::getGranularity() const {
 bool ExposureStatus::isIterativeMode() const
 {
     return iterativeMode;
+}
+
+bool ExposureStatus::getAutoAdvanceTestStrip() const
+{
+    return autoAdvanceTestStrip;
+}
+
+void ExposureStatus::setAutoAdvanceTestStrip(bool autoAdvanceTestStrip)
+{
+    this->autoAdvanceTestStrip = autoAdvanceTestStrip;
 }
 
 // Setters
@@ -111,10 +122,11 @@ void ExposureStatus::saveToPreferences()
         preferences.putInt("mode", static_cast<int>(this->mode));
         preferences.putInt("granularity", static_cast<int>(this->granularity));
         preferences.putBool("iterativeMode", this->iterativeMode);
+        preferences.putBool("autoAdvanceTestStrip", this->autoAdvanceTestStrip);
         preferences.end();
 
-        Logger.log(MYLOG, ELOG_LEVEL_INFO, "Saved exposure status to preferences: time=%.2f, step=%d, mode=%d, granularity=%d, iterativeMode=%d", 
-            this->exposureTime, this->step, static_cast<int>(this->mode), static_cast<int>(this->granularity), this->iterativeMode);
+        Logger.log(MYLOG, ELOG_LEVEL_INFO, "Saved exposure status to preferences: time=%.2f, step=%d, mode=%d, granularity=%d, iterativeMode=%d, autoAdvanceTestStrip=%d", 
+            this->exposureTime, this->step, static_cast<int>(this->mode), static_cast<int>(this->granularity), this->iterativeMode, this->autoAdvanceTestStrip);
     } else {
         Logger.log(MYLOG, ELOG_LEVEL_ERROR, "Failed to open preferences for writing exposure status");
     }

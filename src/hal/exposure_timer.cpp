@@ -15,11 +15,13 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status,
                                          Bounce2::Button* footSwitch,
                                          QueueHandle_t inputQueue, 
                                          QueueHandle_t displayQueue,
-                                         QueueHandle_t beeperQueue) {
+                                         QueueHandle_t beeperQueue,
+                                         QueueHandle_t exposureControlQueue) 
+{
     if (instance_ == nullptr) {
         // Create instance only if it doesn't exist and we have all required parameters
-        if (status && relayOne && relayTwo && encoderValue && encoderMode && display && beeper && footSwitch && inputQueue && displayQueue && beeperQueue) {
-            instance_ = new ExposureTimer(status, relayOne, relayTwo, encoderValue, encoderMode, display, beeper, footSwitch, inputQueue, displayQueue, beeperQueue);
+        if (status && relayOne && relayTwo && encoderValue && encoderMode && display && beeper && footSwitch && inputQueue && displayQueue && beeperQueue && exposureControlQueue) {
+            instance_ = new ExposureTimer(status, relayOne, relayTwo, encoderValue, encoderMode, display, beeper, footSwitch, inputQueue, displayQueue, beeperQueue, exposureControlQueue);
         } else {
             // If instance doesn't exist but parameters are null, this is an error
             // In a real implementation, you might want to handle this differently
@@ -30,8 +32,8 @@ ExposureTimer& ExposureTimer::getInstance(ExposureStatus* status,
 }
 
 
-ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relayOne, Relay* relayTwo, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue)
-    : status_(status), relayOne_(relayOne), relayTwo_(relayTwo), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), footSwitch_(footSwitch), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
+ExposureTimer::ExposureTimer(ExposureStatus* status, Relay* relayOne, Relay* relayTwo, AiEsp32RotaryEncoder* encoderValue, AiEsp32RotaryEncoder* encoderMode, TM1638Interface* display, Beeper* beeper, Bounce2::Button* footSwitch, QueueHandle_t inputQueue, QueueHandle_t displayQueue, QueueHandle_t beeperQueue, QueueHandle_t exposureControlQueue)
+    : status_(status), relayOne_(relayOne), relayTwo_(relayTwo), encoderValue_(encoderValue), encoderMode_(encoderMode), display_(display), beeper_(beeper), footSwitch_(footSwitch), inputQueue_(inputQueue), displayQueue_(displayQueue), beeperQueue_(beeperQueue), exposureControlQueue_(exposureControlQueue) ,exposing_(false), remainingTimeMs_(0), lastTickMs_(0), msg_() 
 {
 
     // After initialization, ensure that the rotary encoders are initialized to the values corresponding to the current state
@@ -247,7 +249,7 @@ void ExposureTimer::displayExposingTime(unsigned long timeMs)
 {
     double timeSec = timeMs / 1000.0f;
 
-    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, "%4.1f     ", timeSec);
+    snprintf(displayBuffer_, MAX_DISPLAY_STR_LEN, " %4.1f    ", timeSec);
 
     Logger.log(MYLOG, ELOG_LEVEL_INFO, "displayed \"%s\"", displayBuffer_);    
 }
@@ -338,17 +340,32 @@ void ExposureTimer::processInput(MsgType event, void *payload)
                 status_->isIterativeMode() ? displayMessage("ITER ON ") : displayMessage("ITER OFF"); 
                 vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the iterative mode change message before updating the display with the current time and granularity
                 displayTimeandGranularity();
+            } else if (event == MsgType::AUTO_ADVANCE_BUTTON_PRESS) {
+                status_->setAutoAdvanceTestStrip(!status_->getAutoAdvanceTestStrip());
+                settingsChanged = true;
+                display_->clear();
+
+                status_->getAutoAdvanceTestStrip() ? displayMessage("AUTO ON ") : displayMessage("AUTO OFF"); 
+                vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the auto-advance mode change message before updating the display with the current time and granularity
+                displayTimeandGranularity();
             }
             break;
         case State::TEST_STRIP_SEQUENCE:
             // Events handled externally for sequence advancement, except for cancel button which can be used to exit the sequence
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
                 status_->setMode(State::TEST_STRIP_CONFIG);
+                getRelayOne()->off();
+                getRelayTwo()->off();
                 displayMode();
-            } 
+            } else if (event == MsgType::FOOT_SWITCH_PRESS) {
+                // Foot switch can also be used to advance the sequence, but we will handle that separately in the exposure control logic since it involves timing and relay control
+                msg_.type = MsgType::FOOT_SWITCH_PRESS;
+                msg_.payload = nullptr;
+                xQueueSend(exposureControlQueue_, &msg_, 0);
+            }
             break;
         case State::FSTOP_EXPOSURE_CONFIG:
-            if (event == MsgType::BUTTON_MODE_PRESS) {
+            if (event == MsgType::BUTTON_MODE_PRESS || event == MsgType::FOOT_SWITCH_PRESS) {
                 status_->setMode(State::FSTOP_EXPOSURE);                
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
@@ -374,7 +391,9 @@ void ExposureTimer::processInput(MsgType event, void *payload)
         case State::FSTOP_EXPOSURE:
             // Automatic transition back handled externally
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
-                status_->setMode(State::FSTOP_EXPOSURE_CONFIG);                
+                status_->setMode(State::FSTOP_EXPOSURE_CONFIG);      
+                getRelayOne()->off();
+                getRelayTwo()->off();
                 displayMode();
                 vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
                 displayTimeandStep(); // Update display to show current parameters for f-stop exposure configuration mode
@@ -382,7 +401,7 @@ void ExposureTimer::processInput(MsgType event, void *payload)
             break;
         
         case State::TIME_EXPOSURE_CONFIG:
-            if (event == MsgType::BUTTON_MODE_PRESS) {
+            if (event == MsgType::BUTTON_MODE_PRESS || event == MsgType::FOOT_SWITCH_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE);
             } else if (event == MsgType::MODE_BUTTON_PRESS) {
                 status_->setMode(State::FOCUS_LIGHT_OFF);
@@ -399,6 +418,8 @@ void ExposureTimer::processInput(MsgType event, void *payload)
             // Automatic transition back handled externally
              if (event == MsgType::CANCEL_BUTTON_PRESS) {
                 status_->setMode(State::TIME_EXPOSURE_CONFIG);
+                getRelayOne()->off();
+                getRelayTwo()->off();
                 displayMode();
                 vTaskDelay(pdMS_TO_TICKS(MODE_DISPLAY_TIME_MS)); // Delay to allow user to see the mode change before the display updates with the new mode's parameters
                 displayTime(); // Update display to show current parameters for time-based exposure configuration mode
@@ -550,6 +571,16 @@ void ExposureTimer::handleInput()
             msg_.payload = nullptr;
 
             Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the foot switch");
+
+            xQueueSend(inputQueue_, &msg_, 0);
+        }
+
+        if (tmButtons & AUTO_ADVANCE_BUTTON) // Auto-advance button has been pressed
+        {
+            msg_.type = MsgType::AUTO_ADVANCE_BUTTON_PRESS;
+            msg_.payload = nullptr;
+
+            Logger.log(MYLOG, ELOG_LEVEL_INFO, "user has pressed the auto-advance button");
 
             xQueueSend(inputQueue_, &msg_, 0);
         }
